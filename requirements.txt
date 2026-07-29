@@ -1,3 +1,4 @@
 streamlit
-pydub
-audioop-lts
+librosa
+soundfile
+

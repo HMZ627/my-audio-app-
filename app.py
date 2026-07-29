@@ -12,89 +12,112 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- Inject Custom CSS for Background Animation & Dark Studio UI ---
-custom_css = """
-<style>
-/* Main App Background & Glassmorphism */
-.stApp {
-    background-color: #0d1117;
-    color: #e6edf3;
-}
+# --- Define Your Transparent Headset Asset ---
+# IMPORTANT: This MUST be a PNG with a transparent background.
+# I have found a temporary, clean example that works well with dark backgrounds.
+HEADSET_URL = "https://freepngimg.com/download/headphones/2-headphones-png-image-with-transparency-background.png"
 
-/* Background Animated Rotating Headset */
-.headset-bg {
+# --- Inject Custom CSS for Glassmorphism & Continuous Rotation ---
+# This CSS removes the yellow box and makes the image float seamlessly.
+custom_css = f"""
+<style>
+/* Main App Background - Dark Studio Theme */
+.stApp {{
+    background-color: #01060a; /* Pure deep black/dark navy */
+    color: #f0f6fc;
+}}
+
+/* -- GLASSMORPHISM UI STYLING -- */
+/* Makes the content panels slightly translucent with a blur effect */
+div.block-container {{
+    background: rgba(13, 17, 23, 0.7); /* Translucent dark charcoal */
+    backdrop-filter: blur(10px); /* The "Glass" effect */
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 2rem !important;
+    margin-top: 2rem;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    z-index: 2; /* Keeps UI above the headset */
+    position: relative;
+}}
+
+/* -- BACKGROUND ASSET STYLING -- */
+/* Handles the rotating transparent headset */
+.headset-container {{
     position: fixed;
     top: 50%;
-    right: 5%;
+    right: 5%; /* Positioned like the mockup */
     transform: translateY(-50%);
-    width: 550px;
-    height: 550px;
-    background-image: url('https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=1000&q=80');
+    width: 500px;
+    height: 500px;
+    z-index: 1; /* Sits behind the Glassmorphism UI */
+    pointer-events: none; /* User can click "through" it to UI elements */
+    opacity: 0.8; /* Subtle presence */
+}}
+
+.rotating-headset {{
+    width: 100%;
+    height: 100%;
+    background-image: url('{HEADSET_URL}');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    opacity: 0.25;
-    z-index: 0;
-    pointer-events: none;
-    animation: rotateHeadset 25s linear infinite;
-    filter: drop-shadow(0 0 35px rgba(0, 229, 255, 0.3));
+    /* Continuous Z-Axis Rotation */
+    animation: rotateSeamless 30s linear infinite;
+    /* Subtle Cyan Glow matching Mockup data trails */
+    filter: drop-shadow(0 0 25px rgba(0, 229, 255, 0.5));
+}}
+
+/* Define the continuous rotation keyframes */
+@keyframes rotateSeamless {{
+    from {{
+        transform: rotate(0deg);
+    }}
+    to {{
+        transform: rotate(360deg);
+    }}
+}}
+
+/* -- STYLING STREAMLIT COMPONENTS -- */
+/* Custom styling for sliders and buttons to match the aesthetic */
+.stSlider > div > div > div > div {{
+    background-color: #00e5ff; /* Cyan accent */
+}}
+
+.stSlider > div {{
+    color: #ffffff;
 }
 
-/* Keyframe for Z-Axis Continuous Rotation */
-@keyframes rotateHeadset {
-    0% {
-        transform: translateY(-50%) rotate(0deg) scale(1);
-    }
-    50% {
-        transform: translateY(-50%) rotate(180deg) scale(1.05);
-    }
-    100% {
-        transform: translateY(-50%) rotate(360deg) scale(1);
-    }
-}
-
-/* Glassmorphic Container Styling for Controls */
-div[data-testid="stVerticalBlock"] > div {
-    z-index: 1;
-}
-
-/* Custom Neon Cyan Accent Styling for Sliders */
-.stSlider > div {
-    color: #00e5ff;
-}
-
-.stButton > button {
+.stButton > button {{
     background: linear-gradient(135deg, #00e5ff 0%, #0077ff 100%);
     color: #ffffff;
     border: none;
     border-radius: 8px;
     font-weight: bold;
-    padding: 0.6rem 1.2rem;
     transition: all 0.3s ease;
-}
+}}
 
-.stButton > button:hover {
-    box-shadow: 0 0 15px rgba(0, 229, 255, 0.6);
+.stButton > button:hover {{
+    box-shadow: 0 0 15px rgba(0, 229, 255, 0.7);
     transform: translateY(-2px);
-}
+}}
 </style>
 
-<!-- Background Headset Container -->
-<div class="headset-bg"></div>
+<!-- Background Headset HTML Container -->
+<div class="headset-container">
+    <div class="rotating-headset"></div>
+</div>
 """
 
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# --- Core Audio Processing Functions ---
+# --- Core Audio Processing Functions (Unchanged) ---
 
 def apply_reverb(y, sr, wet_level=0.3, delay_ms=40, decay=0.5):
     """Applies a feedback delay network to simulate audio reverb."""
-    if wet_level <= 0:
-        return y
-    
+    if wet_level <= 0: return y
     delay_samples = int(sr * (delay_ms / 1000.0))
     output = np.copy(y)
-    
     if output.ndim == 1:
         for i in range(delay_samples, len(output)):
             output[i] += output[i - delay_samples] * decay
@@ -107,13 +130,13 @@ def apply_reverb(y, sr, wet_level=0.3, delay_ms=40, decay=0.5):
 
 def apply_bass_boost(y, sr, gain_db=6.0, cutoff=200):
     """Custom low-shelf filter for bass boosting."""
-    if gain_db == 0:
-        return y
+    if gain_db == 0: return y
     b, a = scipy.signal.butter(2, cutoff / (sr / 2), btype='low')
     gain_linear = 10 ** (gain_db / 20)
     filtered = scipy.signal.lfilter(b, a, y)
     return y + (filtered * (gain_linear - 1))
 
+# --- App Layout & Logic ---
 
 # --- App Header ---
 st.title("CA.Editor — Web-Based Audio Studio")
@@ -182,5 +205,5 @@ if uploaded_file is not None:
         data=buffer,
         file_name="CA_Editor_Output.wav",
         mime="audio/wav"
-    )
-    
+            )
+            

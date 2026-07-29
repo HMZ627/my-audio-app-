@@ -1,32 +1,29 @@
 import streamlit as st
-from pydub import AudioSegment
+import librosa
+import soundfile as sf
 import io
 
-st.title("Free Audio Speed Changer")
+st.title("Free Modern Audio Speed Changer")
 
-# 1. User uploads a file directly into temporary RAM
 uploaded_file = st.file_uploader("Upload your audio file", type=["mp3", "wav"])
 
 if uploaded_file is not None:
-    # 2. Python reads the audio file straight from RAM
-    audio = AudioSegment.from_file(uploaded_file)
-    
-    # 3. Apply the effect (e.g., speed up the audio by 1.5x)
-    fast_audio = audio._spawn(audio.raw_data, overrides={
-        "frame_rate": int(audio.frame_rate * 1.5)
-    }).set_frame_rate(audio.frame_rate)
-    
-    # 4. Save the new MP3 into an in-memory byte buffer (RAM)
+    # Librosa handles the file directly in Python memory
+    y, sr = librosa.load(uploaded_file, sr=None)
+
+    # Speed up the audio by 1.5x smoothly
+    y_fast = librosa.effects.time_stretch(y, rate=1.5)
+
+    # Convert the processed sound array back to a file buffer
     buffer = io.BytesIO()
-    fast_audio.export(buffer, format="mp3")
-    
-    # 5. Provide a download button for the user
-    st.audio(buffer.getvalue(), format="audio/mp3")
+    sf.write(buffer, y_fast, sr, format='wav')
+    buffer.seek(0)
+
+    # Show preview and download options
+    st.audio(buffer.getvalue(), format="audio/wav")
     st.download_button(
-        label="Download Fast MP3",
+        label="Download Fast Audio",
         data=buffer.getvalue(),
-        file_name="fast_effect.mp3",
-        mime="audio/mp3"
-    )
-    # The moment the session ends, 'buffer' drops out of RAM automatically!
-  
+        file_name="fast_effect.wav",
+        mime="audio/wav"
+     )

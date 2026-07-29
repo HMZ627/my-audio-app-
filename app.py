@@ -15,7 +15,7 @@ st.set_page_config(
 # --- Define Your Transparent Headset Asset ---
 HEADSET_URL = "https://freepngimg.com/download/headphones/2-headphones-png-image-with-transparency-background.png"
 
-# --- Inject Custom CSS for Glassmorphism & Continuous Rotation ---
+# --- Inject Custom CSS for Enhanced Glassmorphism & Edge Gradient ---
 custom_css = f"""
 <style>
 /* Main App Background - Dark Studio Theme */
@@ -24,17 +24,36 @@ custom_css = f"""
     color: #f0f6fc;
 }}
 
-/* Glassmorphism UI Styling */
+/* --- GLASSMORPHISM WITH LIGHT CYAN-BLACK GRADIENT EDGES --- */
 div.block-container {{
-    background: rgba(13, 17, 23, 0.7);
-    backdrop-filter: blur(10px);
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 2rem !important;
+    /* Frosted glass backdrop */
+    background: rgba(13, 22, 33, 0.65);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 20px;
+    padding: 2.5rem !important;
     margin-top: 2rem;
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.7);
     z-index: 2;
     position: relative;
+    
+    /* Gradient Border Trick using border-image */
+    border: 2px solid transparent;
+    border-image: linear-gradient(135deg, #00e5ff 0%, rgba(0, 229, 255, 0.2) 40%, rgba(1, 6, 10, 0.8) 80%, #000000 100%) 1;
+    border-radius: 20px; /* Fallback frame curvature */
+}}
+
+/* Alternative clean gradient border fallback for modern browsers */
+@supports (border-image-source: none) {{
+    div.block-container {{
+        border: 1.5px solid transparent;
+        background-clip: padding-box, border-box;
+        background-origin: padding-box, border-box;
+        background-image: 
+            linear-gradient(rgba(13, 22, 33, 0.75), rgba(13, 22, 33, 0.75)), 
+            linear-gradient(135deg, #00e5ff 0%, rgba(0, 229, 255, 0.3) 35%, rgba(0, 0, 0, 0.8) 80%, #01060a 100%);
+        border-radius: 20px;
+    }}
 }}
 
 /* Background Asset Styling */
@@ -197,5 +216,5 @@ if uploaded_file is not None:
         data=buffer,
         file_name="CA_Editor_Output.wav",
         mime="audio/wav"
-        )
+    )
     

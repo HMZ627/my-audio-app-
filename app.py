@@ -37,23 +37,13 @@ div.block-container {{
     z-index: 2;
     position: relative;
     
-    /* Gradient Border Trick using border-image */
-    border: 2px solid transparent;
-    border-image: linear-gradient(135deg, #00e5ff 0%, rgba(0, 229, 255, 0.2) 40%, rgba(1, 6, 10, 0.8) 80%, #000000 100%) 1;
-    border-radius: 20px; /* Fallback frame curvature */
-}}
-
-/* Alternative clean gradient border fallback for modern browsers */
-@supports (border-image-source: none) {{
-    div.block-container {{
-        border: 1.5px solid transparent;
-        background-clip: padding-box, border-box;
-        background-origin: padding-box, border-box;
-        background-image: 
-            linear-gradient(rgba(13, 22, 33, 0.75), rgba(13, 22, 33, 0.75)), 
-            linear-gradient(135deg, #00e5ff 0%, rgba(0, 229, 255, 0.3) 35%, rgba(0, 0, 0, 0.8) 80%, #01060a 100%);
-        border-radius: 20px;
-    }}
+    /* Gradient Border Trick */
+    border: 1.5px solid transparent;
+    background-clip: padding-box, border-box;
+    background-origin: padding-box, border-box;
+    background-image: 
+        linear-gradient(rgba(13, 22, 33, 0.75), rgba(13, 22, 33, 0.75)), 
+        linear-gradient(135deg, #00e5ff 0%, rgba(0, 229, 255, 0.3) 35%, rgba(0, 0, 0, 0.8) 80%, #01060a 100%);
 }}
 
 /* Background Asset Styling */
@@ -90,11 +80,7 @@ div.block-container {{
     }}
 }}
 
-/* Streamlit Slider & Button Styling */
-.stSlider > div > div > div > div {{
-    background-color: #00e5ff;
-}}
-
+/* Streamlit Slider Text & Button Styling */
 .stSlider > div {{
     color: #ffffff;
 }}

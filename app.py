@@ -13,46 +13,41 @@ st.set_page_config(
 )
 
 # --- Define Your Transparent Headset Asset ---
-# IMPORTANT: This MUST be a PNG with a transparent background.
-# I have found a temporary, clean example that works well with dark backgrounds.
 HEADSET_URL = "https://freepngimg.com/download/headphones/2-headphones-png-image-with-transparency-background.png"
 
 # --- Inject Custom CSS for Glassmorphism & Continuous Rotation ---
-# This CSS removes the yellow box and makes the image float seamlessly.
 custom_css = f"""
 <style>
 /* Main App Background - Dark Studio Theme */
 .stApp {{
-    background-color: #01060a; /* Pure deep black/dark navy */
+    background-color: #01060a;
     color: #f0f6fc;
 }}
 
-/* -- GLASSMORPHISM UI STYLING -- */
-/* Makes the content panels slightly translucent with a blur effect */
+/* Glassmorphism UI Styling */
 div.block-container {{
-    background: rgba(13, 17, 23, 0.7); /* Translucent dark charcoal */
-    backdrop-filter: blur(10px); /* The "Glass" effect */
+    background: rgba(13, 17, 23, 0.7);
+    backdrop-filter: blur(10px);
     border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     padding: 2rem !important;
     margin-top: 2rem;
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-    z-index: 2; /* Keeps UI above the headset */
+    z-index: 2;
     position: relative;
 }}
 
-/* -- BACKGROUND ASSET STYLING -- */
-/* Handles the rotating transparent headset */
+/* Background Asset Styling */
 .headset-container {{
     position: fixed;
     top: 50%;
-    right: 5%; /* Positioned like the mockup */
+    right: 5%;
     transform: translateY(-50%);
     width: 500px;
     height: 500px;
-    z-index: 1; /* Sits behind the Glassmorphism UI */
-    pointer-events: none; /* User can click "through" it to UI elements */
-    opacity: 0.8; /* Subtle presence */
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.8;
 }}
 
 .rotating-headset {{
@@ -62,13 +57,11 @@ div.block-container {{
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    /* Continuous Z-Axis Rotation */
     animation: rotateSeamless 30s linear infinite;
-    /* Subtle Cyan Glow matching Mockup data trails */
     filter: drop-shadow(0 0 25px rgba(0, 229, 255, 0.5));
 }}
 
-/* Define the continuous rotation keyframes */
+/* Continuous Rotation Keyframes */
 @keyframes rotateSeamless {{
     from {{
         transform: rotate(0deg);
@@ -78,15 +71,14 @@ div.block-container {{
     }}
 }}
 
-/* -- STYLING STREAMLIT COMPONENTS -- */
-/* Custom styling for sliders and buttons to match the aesthetic */
+/* Streamlit Slider & Button Styling */
 .stSlider > div > div > div > div {{
-    background-color: #00e5ff; /* Cyan accent */
+    background-color: #00e5ff;
 }}
 
 .stSlider > div {{
     color: #ffffff;
-}
+}}
 
 .stButton > button {{
     background: linear-gradient(135deg, #00e5ff 0%, #0077ff 100%);
@@ -111,11 +103,12 @@ div.block-container {{
 
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# --- Core Audio Processing Functions (Unchanged) ---
+# --- Core Audio Processing Functions ---
 
 def apply_reverb(y, sr, wet_level=0.3, delay_ms=40, decay=0.5):
     """Applies a feedback delay network to simulate audio reverb."""
-    if wet_level <= 0: return y
+    if wet_level <= 0: 
+        return y
     delay_samples = int(sr * (delay_ms / 1000.0))
     output = np.copy(y)
     if output.ndim == 1:
@@ -130,13 +123,12 @@ def apply_reverb(y, sr, wet_level=0.3, delay_ms=40, decay=0.5):
 
 def apply_bass_boost(y, sr, gain_db=6.0, cutoff=200):
     """Custom low-shelf filter for bass boosting."""
-    if gain_db == 0: return y
+    if gain_db == 0: 
+        return y
     b, a = scipy.signal.butter(2, cutoff / (sr / 2), btype='low')
     gain_linear = 10 ** (gain_db / 20)
     filtered = scipy.signal.lfilter(b, a, y)
     return y + (filtered * (gain_linear - 1))
-
-# --- App Layout & Logic ---
 
 # --- App Header ---
 st.title("CA.Editor — Web-Based Audio Studio")
@@ -205,5 +197,5 @@ if uploaded_file is not None:
         data=buffer,
         file_name="CA_Editor_Output.wav",
         mime="audio/wav"
-            )
-            
+        )
+    

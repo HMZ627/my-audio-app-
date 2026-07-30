@@ -19,9 +19,10 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
-# QR Libraries (Pure Python / Self-Contained)
+# Utility Libraries
 import qrcode
 import cv2
+import yt_dlp
 
 # --- Threading Semaphores for Concurrent Limits ---
 if "bg_semaphore" not in st.session_state:
@@ -35,6 +36,10 @@ audio_semaphore = st.session_state["audio_semaphore"]
 if "pdf_semaphore" not in st.session_state:
     st.session_state["pdf_semaphore"] = threading.Semaphore(3)
 pdf_semaphore = st.session_state["pdf_semaphore"]
+
+if "yt_semaphore" not in st.session_state:
+    st.session_state["yt_semaphore"] = threading.Semaphore(2)
+yt_semaphore = st.session_state["yt_semaphore"]
 
 # --- Streamlit Page Configuration ---
 st.set_page_config(
@@ -127,7 +132,7 @@ st.sidebar.info("Use the menu below to switch between utility tools.")
 
 app_mode = st.sidebar.radio(
     "Select Utility Tool:", 
-    ["🎧 Audio Studio", "🖼️ Image BG Remover", "📄 PDF Converter", "📱 QR Studio"]
+    ["🎧 Audio Studio", "🖼️ Image BG Remover", "📄 PDF Converter", "📱 QR Studio", "📹 YouTube Downloader"]
 )
 
 
@@ -141,7 +146,7 @@ if app_mode == "🎧 Audio Studio":
             <div class="bg-image headset-bg"></div>
         </div>
         <div class="tool-banner">
-            💡 <b>Looking for more tools?</b> Open the left menu (<b>More Tools ➔</b>) to access AI tools, PDF Converter, or QR Studio!
+            💡 <b>Looking for more tools?</b> Open the left menu (<b>More Tools ➔</b>) to access tools!
         </div>
         """, 
         unsafe_allow_html=True
@@ -538,7 +543,7 @@ elif app_mode == "📄 PDF Converter":
 
 
 # ==========================================
-# TOOL 4: QR CODE GENERATOR & DECODER (OpenCV Powered)
+# TOOL 4: QR CODE GENERATOR & DECODER
 # ==========================================
 elif app_mode == "📱 QR Studio":
     st.title("CA.Editor — QR Code Studio")
@@ -546,7 +551,6 @@ elif app_mode == "📱 QR Studio":
 
     qr_sub_mode = st.radio("Select Action:", ["✨ Generate QR Code", "🔍 Decode QR Code"], horizontal=True)
 
-    # GENERATOR MODE
     if qr_sub_mode == "✨ Generate QR Code":
         qr_type = st.selectbox("Content Type:", ["Plain Text / URL", "📶 Wi-Fi Access Point"])
 
@@ -614,7 +618,6 @@ elif app_mode == "📱 QR Studio":
                     mime="image/png"
                 )
 
-    # DECODER MODE (Pure OpenCV)
     elif qr_sub_mode == "🔍 Decode QR Code":
         uploaded_qr = st.file_uploader("Upload Image Containing QR Code", type=["png", "jpg", "jpeg", "webp"])
 
@@ -657,3 +660,141 @@ elif app_mode == "📱 QR Studio":
                         st.code(raw_data, language="text")
                 else:
                     st.error("❌ Could not detect or read any valid QR code in this image. Make sure the image is clear and well-lit.")
+
+
+# ==========================================
+# TOOL 5: YOUTUBE MEDIA DOWNLOADER
+# ==========================================
+elif app_mode == "📹 YouTube Downloader":
+    st.title("CA.Editor — YouTube Downloader Studio")
+    st.write("Extract video streams at various resolutions or convert directly to audio (MP3).")
+
+    yt_url = st.text_input("Enter YouTube Video Link:", placeholder="https://www.youtube.com/watch?v=...")
+
+    if yt_url:
+        if "yt_info" not in st.session_state or st.session_state.get("yt_url_key") != yt_url:
+            with st.spinner("Fetching video metadata & available qualities..."):
+                try:
+                    ydl_opts_meta = {'quiet': True, 'no_warnings': True}
+                    with yt_dlp.YoutubeDL(ydl_opts_meta) as ydl:
+                        info = ydl.extract_info(yt_url, download=False)
+                        st.session_state["yt_info"] = info
+                        st.session_state["yt_url_key"] = yt_url
+                except Exception as e:
+                    st.error(f"Error fetching metadata: {e}")
+                    st.session_state.pop("yt_info", None)
+
+        if "yt_info" in st.session_state:
+            info = st.session_state["yt_info"]
+            
+            st.subheader(f"📹 {info.get('title', 'YouTube Video')}")
+            col_t1, col_t2 = st.columns([1, 2])
+            with col_t1:
+                st.image(info.get("thumbnail"), use_column_width=True)
+            with col_t2:
+                st.write(f"**Uploader:** {info.get('uploader', 'N/A')}")
+                st.write(f"**Duration:** {info.get('duration', 0) // 60} mins {info.get('duration', 0) % 60} secs")
+
+            st.write("---")
+            format_type = st.radio("Download Mode:", ["🎬 Video (Choose Resolution)", "🎵 Audio Only (MP3)"], horizontal=True)
+
+            if format_type == "🎬 Video (Choose Resolution)":
+                # Extract available video resolutions
+                formats = info.get("formats", [])
+                resolutions = set()
+                for f in formats:
+                    if f.get("vcodec") != "none" and f.get("height"):
+                        resolutions.add(f.get("height"))
+
+                sorted_res = sorted(list(resolutions), reverse=True)
+                res_options = [f"{r}p" for r in sorted_res if r >= 144]
+
+                if not res_options:
+                    res_options = ["Best Available"]
+
+                selected_res = st.selectbox("Select Target Resolution:", res_options)
+
+                if st.button("⚡ Download Video"):
+                    acquired = yt_semaphore.acquire(blocking=False)
+                    if not acquired:
+                        st.info("⏳ YouTube downloader busy with 2 other streams. Queuing request...")
+                        yt_semaphore.acquire()
+
+                    try:
+                        with st.spinner("Processing & downloading video stream..."):
+                            with tempfile.TemporaryDirectory() as tmpdir:
+                                height_val = selected_res.replace("p", "")
+                                
+                                if height_val.isdigit():
+                                    f_str = f"bestvideo[height<={height_val}]+bestaudio/best[height<={height_val}]/best"
+                                else:
+                                    f_str = "best"
+
+                                ydl_opts = {
+                                    'format': f_str,
+                                    'outtmpl': os.path.join(tmpdir, '%(title)s.%(ext)s'),
+                                    'merge_output_format': 'mp4',
+                                    'quiet': True,
+                                }
+
+                                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                                    ydl.download([yt_url])
+
+                                downloaded_files = os.listdir(tmpdir)
+                                if downloaded_files:
+                                    out_file = os.path.join(tmpdir, downloaded_files[0])
+                                    with open(out_file, "rb") as f:
+                                        file_bytes = f.read()
+
+                                    st.download_button(
+                                        label=f"💾 Download Video ({selected_res})",
+                                        data=file_bytes,
+                                        file_name=downloaded_files[0],
+                                        mime="video/mp4"
+                                    )
+                    except Exception as e:
+                        st.error(f"Download failed: {e}")
+                    finally:
+                        yt_semaphore.release()
+
+            elif format_type == "🎵 Audio Only (MP3)":
+                if st.button("⚡ Extract & Download MP3"):
+                    acquired = yt_semaphore.acquire(blocking=False)
+                    if not acquired:
+                        st.info("⏳ YouTube downloader busy with 2 other streams. Queuing request...")
+                        yt_semaphore.acquire()
+
+                    try:
+                        with st.spinner("Extracting audio stream & converting to MP3..."):
+                            with tempfile.TemporaryDirectory() as tmpdir:
+                                ydl_opts = {
+                                    'format': 'bestaudio/best',
+                                    'postprocessors': [{
+                                        'key': 'FFmpegExtractAudio',
+                                        'preferredcodec': 'mp3',
+                                        'preferredquality': '192',
+                                    }],
+                                    'outtmpl': os.path.join(tmpdir, '%(title)s.%(ext)s'),
+                                    'quiet': True,
+                                }
+
+                                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                                    ydl.download([yt_url])
+
+                                downloaded_files = os.listdir(tmpdir)
+                                mp3_files = [f for f in downloaded_files if f.endswith(".mp3")]
+                                if mp3_files:
+                                    out_file = os.path.join(tmpdir, mp3_files[0])
+                                    with open(out_file, "rb") as f:
+                                        file_bytes = f.read()
+
+                                    st.download_button(
+                                        label="💾 Download Audio File (.mp3)",
+                                        data=file_bytes,
+                                        file_name=mp3_files[0],
+                                        mime="audio/mpeg"
+                                    )
+                    except Exception as e:
+                        st.error(f"Audio extraction failed: {e}")
+                    finally:
+                        yt_semaphore.release()

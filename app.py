@@ -26,7 +26,7 @@ if "audio_semaphore" not in st.session_state:
     st.session_state["audio_semaphore"] = threading.Semaphore(5)
 audio_semaphore = st.session_state["audio_semaphore"]
 
-# PDF Converter: Allow up to 3 parallel conversion tasks
+# PDF Converter: Limit to 3 parallel conversion tasks to protect RAM
 if "pdf_semaphore" not in st.session_state:
     st.session_state["pdf_semaphore"] = threading.Semaphore(3)
 pdf_semaphore = st.session_state["pdf_semaphore"]
@@ -430,8 +430,10 @@ elif app_mode == "📄 PDF Converter":
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                             )
                         finally:
-                            if os.path.exists(tmp_pdf_path): os.remove(tmp_pdf_path)
-                            if os.path.exists(tmp_docx_path): os.remove(tmp_docx_path)
+                            if os.path.exists(tmp_pdf_path): 
+                                os.remove(tmp_pdf_path)
+                            if os.path.exists(tmp_docx_path): 
+                                os.remove(tmp_docx_path)
 
                     elif target_format == "Excel (.xlsx)":
                         excel_buffer = io.BytesIO()
@@ -513,5 +515,4 @@ elif app_mode == "📄 PDF Converter":
                 pdf_semaphore.acquire()
 
             try:
-                with st.spinner("Downscaling and building PDF in RAM..."):
-                  
+               

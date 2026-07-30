@@ -14,4 +14,3 @@ reportlab
 python-docx
 pdf2image
 Pillow
-pip install qrcode[pil] pyzbar opencv-python-headless

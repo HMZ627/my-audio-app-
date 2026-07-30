@@ -530,7 +530,7 @@ elif app_mode == "📄 PDF Converter":
 
         if uploaded_imgs and st.button("📸 Convert Images to PDF"):
             acquired = pdf_semaphore.acquire(blocking=False)
-      if not acquired:
+            if not acquired:
                 st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
                 pdf_semaphore.acquire()
 

@@ -182,7 +182,7 @@ if app_mode == "🎧 Audio Studio":
         # Audio Processing with Semaphore (Limit 5 parallel users)
         acquired = audio_semaphore.acquire(blocking=False)
         if not acquired:
-            st.info("⏳ Audio engine is at capacity (5 active users). Queuing your request...")
+            st.info("⏳ Please wait in the queue, processing your request...")
             audio_semaphore.acquire() # Block until slot is available
 
         try:
@@ -261,7 +261,7 @@ elif app_mode == "🖼️ Image BG Remover":
             # Image BG Remover processing with Semaphore (Limit 2 parallel users)
             acquired = bg_semaphore.acquire(blocking=False)
             if not acquired:
-                st.info("⏳ AI engine is processing 2 images right now. You are next in queue — please wait!")
+                st.info("⏳ Processing your request. You are next in queue — please wait!")
                 bg_semaphore.acquire()  # Block until 1 of the 2 slots opens up
 
             try:

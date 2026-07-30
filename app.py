@@ -663,7 +663,7 @@ elif app_mode == "📱 QR Studio":
 
 
 # ==========================================
-# TOOL 5: YOUTUBE MEDIA DOWNLOADER
+# TOOL 5: YOUTUBE MEDIA DOWNLOADER (FIXED)
 # ==========================================
 elif app_mode == "📹 YouTube Downloader":
     st.title("CA.Editor — YouTube Downloader Studio")
@@ -671,20 +671,19 @@ elif app_mode == "📹 YouTube Downloader":
 
     yt_url = st.text_input("Enter YouTube Video Link:", placeholder="https://www.youtube.com/watch?v=...")
 
-    # Helper function for options that bypass YouTube's datacenter IP block (403 Forbidden)
+    # Options helper designed to clear HTTP 403 Forbidden errors on datacenter/cloud IPs
     def get_yt_dlp_options(extra_opts=None):
         base_opts = {
             'quiet': True,
             'no_warnings': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-us,en;q=0.5',
             },
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['ios', 'android', 'mweb']
+                    'player_client': ['mweb', 'tv_embedded']
                 }
             }
         }
@@ -746,7 +745,8 @@ elif app_mode == "📹 YouTube Downloader":
                                 height_val = selected_res.replace("p", "")
                                 
                                 if height_val.isdigit():
-                                    f_str = f"bestvideo[height<={height_val}]+bestaudio/best[height<={height_val}]/best"
+                                    # Fall back from requested combined stream -> requested split stream -> default best
+                                    f_str = f"best[height<={height_val}]/bestvideo[height<={height_val}]+bestaudio/best"
                                 else:
                                     f_str = "best"
 

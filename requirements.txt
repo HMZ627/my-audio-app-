@@ -3,5 +3,6 @@ librosa
 soundfile
 numpy
 scipy
-rembg
 pillow
+rembg
+onnxruntime

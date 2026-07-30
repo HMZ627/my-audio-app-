@@ -671,11 +671,32 @@ elif app_mode == "📹 YouTube Downloader":
 
     yt_url = st.text_input("Enter YouTube Video Link:", placeholder="https://www.youtube.com/watch?v=...")
 
+    # Helper function for options that bypass YouTube's datacenter IP block (403 Forbidden)
+    def get_yt_dlp_options(extra_opts=None):
+        base_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+            },
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'android', 'mweb']
+                }
+            }
+        }
+        if extra_opts:
+            base_opts.update(extra_opts)
+        return base_opts
+
     if yt_url:
         if "yt_info" not in st.session_state or st.session_state.get("yt_url_key") != yt_url:
             with st.spinner("Fetching video metadata & available qualities..."):
                 try:
-                    ydl_opts_meta = {'quiet': True, 'no_warnings': True}
+                    ydl_opts_meta = get_yt_dlp_options({'download': False})
                     with yt_dlp.YoutubeDL(ydl_opts_meta) as ydl:
                         info = ydl.extract_info(yt_url, download=False)
                         st.session_state["yt_info"] = info
@@ -699,7 +720,6 @@ elif app_mode == "📹 YouTube Downloader":
             format_type = st.radio("Download Mode:", ["🎬 Video (Choose Resolution)", "🎵 Audio Only (MP3)"], horizontal=True)
 
             if format_type == "🎬 Video (Choose Resolution)":
-                # Extract available video resolutions
                 formats = info.get("formats", [])
                 resolutions = set()
                 for f in formats:
@@ -730,12 +750,11 @@ elif app_mode == "📹 YouTube Downloader":
                                 else:
                                     f_str = "best"
 
-                                ydl_opts = {
+                                ydl_opts = get_yt_dlp_options({
                                     'format': f_str,
                                     'outtmpl': os.path.join(tmpdir, '%(title)s.%(ext)s'),
                                     'merge_output_format': 'mp4',
-                                    'quiet': True,
-                                }
+                                })
 
                                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                                     ydl.download([yt_url])
@@ -767,7 +786,7 @@ elif app_mode == "📹 YouTube Downloader":
                     try:
                         with st.spinner("Extracting audio stream & converting to MP3..."):
                             with tempfile.TemporaryDirectory() as tmpdir:
-                                ydl_opts = {
+                                ydl_opts = get_yt_dlp_options({
                                     'format': 'bestaudio/best',
                                     'postprocessors': [{
                                         'key': 'FFmpegExtractAudio',
@@ -775,8 +794,7 @@ elif app_mode == "📹 YouTube Downloader":
                                         'preferredquality': '192',
                                     }],
                                     'outtmpl': os.path.join(tmpdir, '%(title)s.%(ext)s'),
-                                    'quiet': True,
-                                }
+                                })
 
                                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                                     ydl.download([yt_url])

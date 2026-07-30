@@ -17,3 +17,4 @@ Pillow
 qrcode
 pillow
 opencv-python-headless
+yt-dlp

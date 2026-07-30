@@ -16,14 +16,16 @@ st.set_page_config(
 # --- Define Your Transparent Headset Asset ---
 HEADSET_URL = "https://freepngimg.com/download/headphones/2-headphones-png-image-with-transparency-background.png"
 
-# --- Inject Custom CSS ---
+# --- Inject Custom CSS for Glassmorphism & Continuous Rotation ---
 custom_css = f"""
 <style>
+/* Main App Background - Dark Studio Theme */
 .stApp {{
     background-color: #01060a;
     color: #f0f6fc;
 }}
 
+/* --- GLASSMORPHISM WITH LIGHT CYAN-BLACK GRADIENT EDGES --- */
 div.block-container {{
     background: rgba(13, 22, 33, 0.65);
     backdrop-filter: blur(16px);
@@ -42,6 +44,7 @@ div.block-container {{
         linear-gradient(135deg, #00e5ff 0%, rgba(0, 229, 255, 0.3) 35%, rgba(0, 0, 0, 0.8) 80%, #01060a 100%);
 }}
 
+/* Background Asset Styling */
 .headset-container {{
     position: fixed;
     top: 50%;
@@ -87,6 +90,7 @@ div.block-container {{
 }}
 </style>
 
+<!-- Background Headset HTML Container -->
 <div class="headset-container">
     <div class="rotating-headset"></div>
 </div>
@@ -184,45 +188,44 @@ if app_mode == "🎧 Audio Studio":
 
 
 # ==========================================
-# TOOL 2: IMAGE BACKGROUND REMOVER (LAZY LOADED)
+# TOOL 2: IMAGE BACKGROUND REMOVER
 # ==========================================
 elif app_mode == "🖼️ Image BG Remover":
     st.title("CA.Editor — Image Background Remover")
     st.write("Remove image backgrounds instantly in RAM using AI segmentation.")
 
-    # Cache rembg session to save RAM
     @st.cache_resource
     def load_rembg_session():
         from rembg import new_session
-        return new_session("u2netp") # 'u2netp' is a lightweight mobile model
+        return new_session("u2netp")
 
     uploaded_img = st.file_uploader("Upload an Image", type=["png", "jpg", "jpeg", "webp"])
 
     if uploaded_img is not None:
-        from rembg import remove
-        session = load_rembg_session()
         input_image = Image.open(uploaded_img)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("Original Image")
-            st.image(input_image, use_column_width=True)
+        st.subheader("Original Image")
+        st.image(input_image, use_column_width=True, width=400)
 
-        with st.spinner("Removing background..."):
-            output_image = remove(input_image, session=session)
+        # Dedicated execution button
+        if st.button("✨ Remove Background"):
+            from rembg import remove
+            session = load_rembg_session()
 
-            with col2:
+            with st.spinner("Removing background via AI..."):
+                output_image = remove(input_image, session=session)
+
                 st.subheader("Background Removed")
                 st.image(output_image, use_column_width=True)
 
-            img_buffer = io.BytesIO()
-            output_image.save(img_buffer, format="PNG")
-            img_buffer.seek(0)
+                img_buffer = io.BytesIO()
+                output_image.save(img_buffer, format="PNG")
+                img_buffer.seek(0)
 
-            st.download_button(
-                label="Download Transparent PNG",
-                data=img_buffer,
-                file_name="CA_BG_Removed.png",
-                mime="image/png"
-            )
-            
+                st.download_button(
+                    label="Download Transparent PNG",
+                    data=img_buffer,
+                    file_name="CA_BG_Removed.png",
+                    mime="image/png"
+                )
+                

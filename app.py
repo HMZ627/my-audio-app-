@@ -663,19 +663,20 @@ elif app_mode == "📱 QR Studio":
 
 
 # ==========================================
-# TOOL 5: YOUTUBE MEDIA DOWNLOADER (FIXED)
+# TOOL 5: YOUTUBE MEDIA DOWNLOADER (SINGLE-PIECE METHOD)
 # ==========================================
 elif app_mode == "📹 YouTube Downloader":
     st.title("CA.Editor — YouTube Downloader Studio")
-    st.write("Extract video streams at various resolutions or convert directly to audio (MP3).")
+    st.write("Extract single-stream pre-merged video files or grab audio-only streams directly.")
 
     yt_url = st.text_input("Enter YouTube Video Link:", placeholder="https://www.youtube.com/watch?v=...")
 
-    # Options helper designed to clear HTTP 403 Forbidden errors on datacenter/cloud IPs
+    # Options helper configured for single-piece download and anti-bot checks
     def get_yt_dlp_options(extra_opts=None):
         base_opts = {
             'quiet': True,
             'no_warnings': True,
+            'ignoreerrors': False,
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -683,7 +684,7 @@ elif app_mode == "📹 YouTube Downloader":
             },
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['mweb', 'tv_embedded']
+                    'player_client': ['mweb', 'tv_embedded', 'android']
                 }
             }
         }
@@ -693,7 +694,7 @@ elif app_mode == "📹 YouTube Downloader":
 
     if yt_url:
         if "yt_info" not in st.session_state or st.session_state.get("yt_url_key") != yt_url:
-            with st.spinner("Fetching video metadata & available qualities..."):
+            with st.spinner("Fetching video metadata..."):
                 try:
                     ydl_opts_meta = get_yt_dlp_options({'download': False})
                     with yt_dlp.YoutubeDL(ydl_opts_meta) as ydl:
@@ -716,44 +717,28 @@ elif app_mode == "📹 YouTube Downloader":
                 st.write(f"**Duration:** {info.get('duration', 0) // 60} mins {info.get('duration', 0) % 60} secs")
 
             st.write("---")
-            format_type = st.radio("Download Mode:", ["🎬 Video (Choose Resolution)", "🎵 Audio Only (MP3)"], horizontal=True)
+            format_type = st.radio("Download Mode:", ["🎬 Video (Single Piece Pre-Merged)", "🎵 Audio Only"], horizontal=True)
 
-            if format_type == "🎬 Video (Choose Resolution)":
-                formats = info.get("formats", [])
-                resolutions = set()
-                for f in formats:
-                    if f.get("vcodec") != "none" and f.get("height"):
-                        resolutions.add(f.get("height"))
-
-                sorted_res = sorted(list(resolutions), reverse=True)
-                res_options = [f"{r}p" for r in sorted_res if r >= 144]
-
-                if not res_options:
-                    res_options = ["Best Available"]
-
-                selected_res = st.selectbox("Select Target Resolution:", res_options)
+            if format_type == "🎬 Video (Single Piece Pre-Merged)":
+                selected_res = st.selectbox("Select Target Max Resolution:", ["720p", "1080p", "480p", "360p"], index=0)
 
                 if st.button("⚡ Download Video"):
                     acquired = yt_semaphore.acquire(blocking=False)
                     if not acquired:
-                        st.info("⏳ YouTube downloader busy with 2 other streams. Queuing request...")
+                        st.info("⏳ YouTube downloader busy with active streams. Queuing request...")
                         yt_semaphore.acquire()
 
                     try:
-                        with st.spinner("Processing & downloading video stream..."):
+                        with st.spinner("Downloading pre-merged single video file..."):
                             with tempfile.TemporaryDirectory() as tmpdir:
                                 height_val = selected_res.replace("p", "")
                                 
-                                if height_val.isdigit():
-                                    # Fall back from requested combined stream -> requested split stream -> default best
-                                    f_str = f"best[height<={height_val}]/bestvideo[height<={height_val}]+bestaudio/best"
-                                else:
-                                    f_str = "best"
+                                # Single-piece format selector: picks combined file directly, avoiding FFmpeg stream merging
+                                f_str = f"best[height<={height_val}]/best"
 
                                 ydl_opts = get_yt_dlp_options({
                                     'format': f_str,
                                     'outtmpl': os.path.join(tmpdir, '%(title)s.%(ext)s'),
-                                    'merge_output_format': 'mp4',
                                 })
 
                                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -766,7 +751,7 @@ elif app_mode == "📹 YouTube Downloader":
                                         file_bytes = f.read()
 
                                     st.download_button(
-                                        label=f"💾 Download Video ({selected_res})",
+                                        label=f"💾 Save Video ({selected_res})",
                                         data=file_bytes,
                                         file_name=downloaded_files[0],
                                         mime="video/mp4"
@@ -776,23 +761,18 @@ elif app_mode == "📹 YouTube Downloader":
                     finally:
                         yt_semaphore.release()
 
-            elif format_type == "🎵 Audio Only (MP3)":
-                if st.button("⚡ Extract & Download MP3"):
+            elif format_type == "🎵 Audio Only":
+                if st.button("⚡ Download Audio File"):
                     acquired = yt_semaphore.acquire(blocking=False)
                     if not acquired:
-                        st.info("⏳ YouTube downloader busy with 2 other streams. Queuing request...")
+                        st.info("⏳ YouTube downloader busy with active streams. Queuing request...")
                         yt_semaphore.acquire()
 
                     try:
-                        with st.spinner("Extracting audio stream & converting to MP3..."):
+                        with st.spinner("Downloading single audio stream..."):
                             with tempfile.TemporaryDirectory() as tmpdir:
                                 ydl_opts = get_yt_dlp_options({
                                     'format': 'bestaudio/best',
-                                    'postprocessors': [{
-                                        'key': 'FFmpegExtractAudio',
-                                        'preferredcodec': 'mp3',
-                                        'preferredquality': '192',
-                                    }],
                                     'outtmpl': os.path.join(tmpdir, '%(title)s.%(ext)s'),
                                 })
 
@@ -800,19 +780,18 @@ elif app_mode == "📹 YouTube Downloader":
                                     ydl.download([yt_url])
 
                                 downloaded_files = os.listdir(tmpdir)
-                                mp3_files = [f for f in downloaded_files if f.endswith(".mp3")]
-                                if mp3_files:
-                                    out_file = os.path.join(tmpdir, mp3_files[0])
+                                if downloaded_files:
+                                    out_file = os.path.join(tmpdir, downloaded_files[0])
                                     with open(out_file, "rb") as f:
                                         file_bytes = f.read()
 
                                     st.download_button(
-                                        label="💾 Download Audio File (.mp3)",
+                                        label="💾 Save Audio Stream",
                                         data=file_bytes,
-                                        file_name=mp3_files[0],
+                                        file_name=downloaded_files[0],
                                         mime="audio/mpeg"
                                     )
                     except Exception as e:
-                        st.error(f"Audio extraction failed: {e}")
+                        st.error(f"Audio download failed: {e}")
                     finally:
                         yt_semaphore.release()

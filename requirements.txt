@@ -17,5 +17,6 @@ Pillow
 qrcode
 pillow
 opencv-python-headless
-git+https://github.com/yt-dlp/yt-dlp.git
+yt-dlp
+
 

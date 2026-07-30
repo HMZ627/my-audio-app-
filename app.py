@@ -32,7 +32,7 @@ div.block-container {{
     -webkit-backdrop-filter: blur(16px);
     border-radius: 20px;
     padding: 2.5rem !important;
-    margin-top: 2rem;
+    margin-top: 1rem;
     box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.7);
     z-index: 2;
     position: relative;
@@ -42,6 +42,21 @@ div.block-container {{
     background-image: 
         linear-gradient(rgba(13, 22, 33, 0.75), rgba(13, 22, 33, 0.75)), 
         linear-gradient(135deg, #00e5ff 0%, rgba(0, 229, 255, 0.3) 35%, rgba(0, 0, 0, 0.8) 80%, #01060a 100%);
+}}
+
+/* Tool Switching Banner at Top */
+.tool-banner {{
+    background: linear-gradient(90deg, rgba(0, 229, 255, 0.15) 0%, rgba(0, 119, 255, 0.15) 100%);
+    border: 1px solid rgba(0, 229, 255, 0.4);
+    border-radius: 10px;
+    padding: 10px 15px;
+    margin-bottom: 20px;
+    color: #00e5ff;
+    font-weight: 500;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }}
 
 /* Background Asset Styling */
@@ -98,15 +113,30 @@ div.block-container {{
 
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# --- Navigation Sidebar ---
-st.sidebar.title("CA.Editor Tools")
-app_mode = st.sidebar.radio("Select Tool:", ["🎧 Audio Studio", "🖼️ Image BG Remover"])
+# --- Enhanced Sidebar Navigation with Clear Prompts ---
+st.sidebar.markdown("### 🛠️ More Tools Available")
+st.sidebar.info("Use the menu below to switch between utility tools.")
+
+app_mode = st.sidebar.radio(
+    "Select Utility Tool:", 
+    ["🎧 Audio Studio", "🖼️ Image BG Remover"]
+)
 
 
 # ==========================================
 # TOOL 1: AUDIO STUDIO
 # ==========================================
 if app_mode == "🎧 Audio Studio":
+    # Top notification banner pointing out additional tools
+    st.markdown(
+        """
+        <div class="tool-banner">
+            💡 <b>Looking for more tools?</b> Open the left menu (<b>More Tools ➔</b>) to use our AI Image Background Remover!
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
     def apply_reverb(y, sr, wet_level=0.3, delay_ms=40, decay=0.5):
         if wet_level <= 0: return y
         delay_samples = int(sr * (delay_ms / 1000.0))
@@ -191,6 +221,15 @@ if app_mode == "🎧 Audio Studio":
 # TOOL 2: IMAGE BACKGROUND REMOVER
 # ==========================================
 elif app_mode == "🖼️ Image BG Remover":
+    st.markdown(
+        """
+        <div class="tool-banner">
+            💡 <b>Need audio editing?</b> Switch back to <b>🎧 Audio Studio</b> using the left menu!
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
     st.title("CA.Editor — Image Background Remover")
     st.write("Remove image backgrounds instantly in RAM using AI segmentation.")
 
@@ -207,7 +246,6 @@ elif app_mode == "🖼️ Image BG Remover":
         st.subheader("Original Image")
         st.image(input_image, use_column_width=True, width=400)
 
-        # Dedicated execution button
         if st.button("✨ Remove Background"):
             from rembg import remove
             session = load_rembg_session()
@@ -227,5 +265,5 @@ elif app_mode == "🖼️ Image BG Remover":
                     data=img_buffer,
                     file_name="CA_BG_Removed.png",
                     mime="image/png"
-                )
-                
+            )
+                             

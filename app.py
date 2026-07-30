@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import tempfile
 import threading
 import librosa
@@ -18,6 +19,11 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
+# QR Libraries
+import qrcode
+from pyzbar.pyzbar import decode as decode_qr
+import cv2
+
 # --- Threading Semaphores for Concurrent Limits ---
 if "bg_semaphore" not in st.session_state:
     st.session_state["bg_semaphore"] = threading.Semaphore(2)
@@ -27,7 +33,6 @@ if "audio_semaphore" not in st.session_state:
     st.session_state["audio_semaphore"] = threading.Semaphore(5)
 audio_semaphore = st.session_state["audio_semaphore"]
 
-# PDF Converter: Limit to 3 parallel conversion tasks to protect RAM
 if "pdf_semaphore" not in st.session_state:
     st.session_state["pdf_semaphore"] = threading.Semaphore(3)
 pdf_semaphore = st.session_state["pdf_semaphore"]
@@ -123,7 +128,7 @@ st.sidebar.info("Use the menu below to switch between utility tools.")
 
 app_mode = st.sidebar.radio(
     "Select Utility Tool:", 
-    ["🎧 Audio Studio", "🖼️ Image BG Remover", "📄 PDF Converter"]
+    ["🎧 Audio Studio", "🖼️ Image BG Remover", "📄 PDF Converter", "📱 QR Studio"]
 )
 
 
@@ -137,7 +142,7 @@ if app_mode == "🎧 Audio Studio":
             <div class="bg-image headset-bg"></div>
         </div>
         <div class="tool-banner">
-            💡 <b>Looking for more tools?</b> Open the left menu (<b>More Tools ➔</b>) to access AI tools or PDF Converter!
+            💡 <b>For more tools</b> Open the left menu <b>More Tools  ➔</b> to access AI tools, PDF Converter, or QR Studio!
         </div>
         """, 
         unsafe_allow_html=True
@@ -208,7 +213,7 @@ if app_mode == "🎧 Audio Studio":
 
         acquired = audio_semaphore.acquire(blocking=False)
         if not acquired:
-            st.info("⏳ Audio engine is at capacity (5 active users). Queuing your request...")
+            st.info("⏳ Processing your request, You're next in queue, please wait...")
             audio_semaphore.acquire()
 
         try:
@@ -289,7 +294,7 @@ elif app_mode == "🖼️ Image BG Remover":
 
             acquired = bg_semaphore.acquire(blocking=False)
             if not acquired:
-                st.info("⏳ AI engine is processing 2 images right now. You are next in queue — please wait!")
+                st.info("⏳ Processing your request. You are next in queue — please wait!")
                 bg_semaphore.acquire()
 
             try:
@@ -334,16 +339,13 @@ elif app_mode == "📄 PDF Converter":
         ]
     )
 
-    # ----------------------------------------------------
-    # MODE 1: Word / Excel -> PDF
-    # ----------------------------------------------------
     if pdf_option == "📄 Word / Excel ➔ PDF":
         uploaded_doc = st.file_uploader("Upload Word (.docx) or Excel (.xlsx) File", type=["docx", "xlsx"])
 
         if uploaded_doc and st.button("🔄 Convert to PDF"):
             acquired = pdf_semaphore.acquire(blocking=False)
             if not acquired:
-                st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
+                st.info("⏳ Please wait in queue. Processing your request...")
                 pdf_semaphore.acquire()
 
             try:
@@ -391,9 +393,6 @@ elif app_mode == "📄 PDF Converter":
             finally:
                 pdf_semaphore.release()
 
-    # ----------------------------------------------------
-    # MODE 2: PDF -> Word / Excel
-    # ----------------------------------------------------
     elif pdf_option == "🔄 PDF ➔ Word / Excel":
         uploaded_pdf = st.file_uploader("Upload PDF Document", type=["pdf"])
         target_format = st.radio("Select Target Output Format:", ["Word (.docx)", "Excel (.xlsx)"], horizontal=True)
@@ -401,7 +400,7 @@ elif app_mode == "📄 PDF Converter":
         if uploaded_pdf and st.button("🔄 Convert PDF"):
             acquired = pdf_semaphore.acquire(blocking=False)
             if not acquired:
-                st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
+                st.info("⏳ Please wait in queue. Processing your request...")
                 pdf_semaphore.acquire()
 
             try:
@@ -464,16 +463,13 @@ elif app_mode == "📄 PDF Converter":
             finally:
                 pdf_semaphore.release()
 
-    # ----------------------------------------------------
-    # MODE 3: PDF -> Image
-    # ----------------------------------------------------
     elif pdf_option == "🖼️ PDF ➔ Image":
         uploaded_pdf = st.file_uploader("Upload PDF File", type=["pdf"])
 
         if uploaded_pdf and st.button("🖼️ Extract Pages as PNG"):
             acquired = pdf_semaphore.acquire(blocking=False)
             if not acquired:
-                st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
+                st.info("⏳ Please wait in queue. Processing your request...")
                 pdf_semaphore.acquire()
 
             try:
@@ -498,9 +494,6 @@ elif app_mode == "📄 PDF Converter":
             finally:
                 pdf_semaphore.release()
 
-    # ----------------------------------------------------
-    # MODE 4: Image -> PDF
-    # ----------------------------------------------------
     elif pdf_option == "📸 Image ➔ PDF":
         uploaded_imgs = st.file_uploader(
             "Upload Images (PNG, JPG, JPEG, WEBP)", 
@@ -511,17 +504,16 @@ elif app_mode == "📄 PDF Converter":
         if uploaded_imgs and st.button("📸 Convert Images to PDF"):
             acquired = pdf_semaphore.acquire(blocking=False)
             if not acquired:
-                st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
+                st.info("⏳ Please wait in queue, processing your request...")
                 pdf_semaphore.acquire()
 
             try:
                 with st.spinner("Downscaling and building PDF in RAM..."):
                     pil_images = []
-                    max_dim = 2048  # Capped max resolution to keep RAM usage low
+                    max_dim = 2048
 
                     for img in uploaded_imgs:
                         im = Image.open(img)
-                        # Downscale image if it exceeds 2048px on any axis
                         if max(im.size) > max_dim:
                             im.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
                         pil_images.append(im.convert("RGB"))
@@ -544,3 +536,139 @@ elif app_mode == "📄 PDF Converter":
                     )
             finally:
                 pdf_semaphore.release()
+
+
+# ==========================================
+# TOOL 4: QR CODE GENERATOR & DECODER
+# ==========================================
+elif app_mode == "📱 QR Studio":
+    st.title("CA.Editor — QR Code Studio")
+    st.write("Generate custom QR codes or decode existing ones (including Wi-Fi network credentials).")
+
+    qr_sub_mode = st.radio("Select Action:", ["✨ Generate QR Code", "🔍 Decode QR Code"], horizontal=True)
+
+    # ----------------------------------------------------
+    # GENERATOR MODE
+    # ----------------------------------------------------
+    if qr_sub_mode == "✨ Generate QR Code":
+        qr_type = st.selectbox("Content Type:", ["Plain Text / URL", "📶 Wi-Fi Access Point"])
+
+        if qr_type == "Plain Text / URL":
+            qr_text = st.text_area("Enter Text or Web Address (URL):", placeholder="https://example.com")
+            
+            if qr_text and st.button("⚡ Generate QR Code"):
+                qr = qrcode.QRCode(
+                    version=1,
+                    error_correction=qrcode.constants.ERROR_CORRECT_H,
+                    box_size=10,
+                    border=4,
+                )
+                qr.add_data(qr_text)
+                qr.make(fit=True)
+
+                img = qr.make_image(fill_color="black", back_color="white")
+                img_buffer = io.BytesIO()
+                img.save(img_buffer, format="PNG")
+                img_buffer.seek(0)
+
+                st.subheader("Your Generated QR Code:")
+                st.image(img_buffer, width=300)
+
+                st.download_button(
+                    label="Download QR Code (PNG)",
+                    data=img_buffer,
+                    file_name="qrcode.png",
+                    mime="image/png"
+                )
+
+        elif qr_type == "📶 Wi-Fi Access Point":
+            col1, col2 = st.columns(2)
+            with col1:
+                ssid = st.text_input("Network Name (SSID):")
+                security = st.selectbox("Security Type:", ["WPA", "WEP", "nopass"])
+            with col2:
+                password = st.text_input("Wi-Fi Password:", type="password" if security != "nopass" else "default")
+                hidden = st.checkbox("Hidden Network?")
+
+            if ssid and st.button("📶 Generate Wi-Fi QR Code"):
+                # Wi-Fi MeCard format: WIFI:S:SSID;T:WPA;P:password;H:true;;
+                wifi_str = f"WIFI:S:{ssid};T:{security};P:{password if security != 'nopass' else ''};H:{'true' if hidden else 'false'};;"
+                
+                qr = qrcode.QRCode(
+                    version=1,
+                    error_correction=qrcode.constants.ERROR_CORRECT_H,
+                    box_size=10,
+                    border=4,
+                )
+                qr.add_data(wifi_str)
+                qr.make(fit=True)
+
+                img = qr.make_image(fill_color="black", back_color="white")
+                img_buffer = io.BytesIO()
+                img.save(img_buffer, format="PNG")
+                img_buffer.seek(0)
+
+                st.subheader("Wi-Fi Connection QR Code:")
+                st.image(img_buffer, width=300)
+
+                st.download_button(
+                    label="Download Wi-Fi QR Code (PNG)",
+                    data=img_buffer,
+                    file_name="wifi_qrcode.png",
+                    mime="image/png"
+                )
+
+    # ----------------------------------------------------
+    # DECODER MODE
+    # ----------------------------------------------------
+    elif qr_sub_mode == "🔍 Decode QR Code":
+        uploaded_qr = st.file_uploader("Upload Image Containing QR Code", type=["png", "jpg", "jpeg", "webp"])
+
+        if uploaded_qr:
+            pil_img = Image.open(uploaded_qr)
+            st.image(pil_img, caption="Uploaded Image", width=300)
+
+            if st.button("🔍 Scan & Decode"):
+                decoded_objects = decode_qr(pil_img)
+
+                # Fallback to OpenCV detector if pyzbar returns empty
+                if not decoded_objects:
+                    img_bytes = np.asarray(bytearray(uploaded_qr.getvalue()), dtype=np.uint8)
+                    cv_img = cv2.imdecode(img_bytes, cv2.IMREAD_COLOR)
+                    detector = cv2.QRCodeDetector()
+                    val, _, _ = detector.detectAndDecode(cv_img)
+                    if val:
+                        raw_data = val
+                    else:
+                        raw_data = None
+                else:
+                    raw_data = decoded_objects[0].data.decode("utf-8")
+
+                if raw_data:
+                    st.success("✅ QR Code Successfully Decoded!")
+                    
+                    # Check for Wi-Fi format: WIFI:S:...;T:...;P:...;
+                    if raw_data.startswith("WIFI:"):
+                        st.subheader("📶 Wi-Fi Network Credentials Detected")
+                        
+                        ssid_match = re.search(r"S:(.*?);", raw_data)
+                        pass_match = re.search(r"P:(.*?);", raw_data)
+                        type_match = re.search(r"T:(.*?);", raw_data)
+
+                        ssid_val = ssid_match.group(1) if ssid_match else "N/A"
+                        pass_val = pass_match.group(1) if pass_match else "(No Password / Open Network)"
+                        type_val = type_match.group(1) if type_match else "Unknown"
+
+                        col_a, col_b = st.columns(2)
+                        with col_a:
+                            st.metric(label="Network SSID Name", value=ssid_val)
+                            st.metric(label="Security Type", value=type_val)
+                        with col_b:
+                            st.code(f"Password: {pass_val}", language="text")
+                        
+                        st.text_area("Raw Decoded String:", raw_data, height=70)
+                    else:
+                        st.subheader("Decoded Text Payload:")
+                        st.code(raw_data, language="text")
+                else:
+                    st.error("❌ Could not detect or read any valid QR code in this image. Make sure the image is clear and well-lit.")

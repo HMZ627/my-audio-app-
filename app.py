@@ -5,20 +5,31 @@ import numpy as np
 import scipy.signal
 import soundfile as sf
 import streamlit as st
+import pandas as pd
 from PIL import Image
+import docx
+from pdf2image import convert_from_bytes
+import pdfplumber
+from pdf2docx import Converter
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
 
 # --- Threading Semaphores for Concurrent Limits ---
-# Image BG Remover: Allow up to 2 parallel tasks
 if "bg_semaphore" not in st.session_state:
-    bg_semaphore = threading.Semaphore(2)
-else:
-    bg_semaphore = st.session_state["bg_semaphore"]
+    st.session_state["bg_semaphore"] = threading.Semaphore(2)
+bg_semaphore = st.session_state["bg_semaphore"]
 
-# Audio Studio: Allow up to 5 parallel tasks
 if "audio_semaphore" not in st.session_state:
-    audio_semaphore = threading.Semaphore(5)
-else:
-    audio_semaphore = st.session_state["audio_semaphore"]
+    st.session_state["audio_semaphore"] = threading.Semaphore(5)
+audio_semaphore = st.session_state["audio_semaphore"]
+
+# PDF Converter: Allow up to 3 parallel conversion tasks
+if "pdf_semaphore" not in st.session_state:
+    st.session_state["pdf_semaphore"] = threading.Semaphore(3)
+pdf_semaphore = st.session_state["pdf_semaphore"]
 
 # --- Streamlit Page Configuration ---
 st.set_page_config(
@@ -87,8 +98,6 @@ div.block-container {{
     font-size: 0.95rem;
 }}
 
-.stSlider > div {{ color: #ffffff; }}
-
 .stButton > button {{
     background: linear-gradient(135deg, #00e5ff 0%, #0077ff 100%);
     color: #ffffff;
@@ -113,7 +122,7 @@ st.sidebar.info("Use the menu below to switch between utility tools.")
 
 app_mode = st.sidebar.radio(
     "Select Utility Tool:", 
-    ["🎧 Audio Studio", "🖼️ Image BG Remover"]
+    ["🎧 Audio Studio", "🖼️ Image BG Remover", "📄 PDF Converter"]
 )
 
 
@@ -127,7 +136,7 @@ if app_mode == "🎧 Audio Studio":
             <div class="bg-image headset-bg"></div>
         </div>
         <div class="tool-banner">
-            💡 <b>Looking for more tools?</b> Open the left menu (<b>More Tools ➔</b>) to use our AI Image Background Remover!
+            💡 <b>Looking for more tools?</b> Open the left menu (<b>More Tools ➔</b>) to access AI tools or PDF Converter!
         </div>
         """, 
         unsafe_allow_html=True
@@ -170,12 +179,10 @@ if app_mode == "🎧 Audio Studio":
         y = st.session_state["audio_data"]
         sr = st.session_state["sr"]
 
-        # Calculate Total Duration in Seconds
         total_samples = y.shape[1] if y.ndim > 1 else len(y)
         total_duration = float(total_samples / sr)
 
         st.subheader("✂️ Audio Range Trimmer")
-        # Dual-Ended Slider for Start & End Selection
         trim_range = st.slider(
             "Drag left handle to cut start, right handle to cut end:",
             min_value=0.0,
@@ -196,7 +203,6 @@ if app_mode == "🎧 Audio Studio":
             bass = st.slider("Bass Boost (dB)", 0, 12, 0, 1)
             reverb = st.slider("Reverb (Wet/Dry Mix)", 0.0, 0.8, 0.0, 0.05)
 
-        # Audio Processing with Semaphore Limit
         acquired = audio_semaphore.acquire(blocking=False)
         if not acquired:
             st.info("⏳ Audio engine is at capacity (5 active users). Queuing your request...")
@@ -204,7 +210,6 @@ if app_mode == "🎧 Audio Studio":
 
         try:
             with st.spinner("Applying trimming & digital signal processing..."):
-                # Step 1: Trim Array using Slider Values FIRST to reduce DSP workload
                 start_sample = int(trim_range[0] * sr)
                 end_sample = int(trim_range[1] * sr)
 
@@ -213,11 +218,9 @@ if app_mode == "🎧 Audio Studio":
                 else:
                     processed_y = y[start_sample:end_sample].copy()
 
-                # Step 2: Apply Pitch Shift
                 if pitch != 0:
                     processed_y = librosa.effects.pitch_shift(y=processed_y, sr=sr, n_steps=pitch)
 
-                # Step 3: Apply Speed Stretch
                 if speed != 1.0:
                     if processed_y.ndim > 1:
                         channels = [librosa.effects.time_stretch(y=processed_y[c], rate=speed) for c in range(processed_y.shape[0])]
@@ -225,15 +228,12 @@ if app_mode == "🎧 Audio Studio":
                     else:
                         processed_y = librosa.effects.time_stretch(y=processed_y, rate=speed)
 
-                # Step 4: Apply Bass Boost
                 if bass > 0:
                     processed_y = apply_bass_boost(processed_y, sr, gain_db=bass)
 
-                # Step 5: Apply Reverb
                 if reverb > 0:
                     processed_y = apply_reverb(processed_y, sr, wet_level=reverb)
 
-                # Export to Buffer
                 buffer = io.BytesIO()
                 out_data = processed_y.T if processed_y.ndim > 1 else processed_y
                 sf.write(buffer, out_data, sr, format='WAV')
@@ -260,9 +260,6 @@ elif app_mode == "🖼️ Image BG Remover":
         <div class="bg-image-container">
             <div class="bg-image camera-bg"></div>
         </div>
-        <div class="tool-banner">
-            💡 <b>Need audio editing?</b> Switch back to <b>🎧 Audio Studio</b> using the left menu!
-        </div>
         """, 
         unsafe_allow_html=True
     )
@@ -287,7 +284,6 @@ elif app_mode == "🖼️ Image BG Remover":
             from rembg import remove
             session = load_rembg_session()
 
-            # Image BG Remover processing with Semaphore (Limit 2 parallel users)
             acquired = bg_semaphore.acquire(blocking=False)
             if not acquired:
                 st.info("⏳ AI engine is processing 2 images right now. You are next in queue — please wait!")
@@ -295,12 +291,10 @@ elif app_mode == "🖼️ Image BG Remover":
 
             try:
                 with st.spinner("Processing background removal via AI..."):
-                    # Step 1: Smart Downscaling (Caps dimensions at 2048px to preserve RAM)
                     max_dim = 2048
                     if max(input_image.size) > max_dim:
                         input_image.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
 
-                    # Step 2: Remove Background safely
                     output_image = remove(input_image, session=session)
 
                     st.subheader("Background Removed")
@@ -318,4 +312,206 @@ elif app_mode == "🖼️ Image BG Remover":
                     )
             finally:
                 bg_semaphore.release()
-                    
+
+
+# ==========================================
+# TOOL 3: PDF CONVERTER
+# ==========================================
+elif app_mode == "📄 PDF Converter":
+    st.title("CA.Editor — PDF Studio & Converter")
+    st.write("Perform fast, memory-optimized conversion between PDFs, documents, spreadsheets, and images.")
+
+    pdf_option = st.selectbox(
+        "Select Tool Mode:",
+        [
+            "📄 Word / Excel ➔ PDF",
+            "🔄 PDF ➔ Word / Excel",
+            "🖼️ PDF ➔ Image",
+            "📸 Image ➔ PDF"
+        ]
+    )
+
+    # ----------------------------------------------------
+    # MODE 1: Word / Excel -> PDF
+    # ----------------------------------------------------
+    if pdf_option == "📄 Word / Excel ➔ PDF":
+        uploaded_doc = st.file_uploader("Upload Word (.docx) or Excel (.xlsx) File", type=["docx", "xlsx"])
+
+        if uploaded_doc and st.button("🔄 Convert to PDF"):
+            acquired = pdf_semaphore.acquire(blocking=False)
+            if not acquired:
+                st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
+                pdf_semaphore.acquire()
+
+            try:
+                with st.spinner("Generating PDF document in memory..."):
+                    pdf_buffer = io.BytesIO()
+
+                    if uploaded_doc.name.endswith(".docx"):
+                        doc = docx.Document(uploaded_doc)
+                        doc_pdf = SimpleDocTemplate(pdf_buffer, pagesize=letter)
+                        styles = getSampleStyleSheet()
+                        story = []
+
+                        for p in doc.paragraphs:
+                            if p.text.strip():
+                                story.append(Paragraph(p.text, styles['Normal']))
+                                story.append(Spacer(1, 10))
+
+                        doc_pdf.build(story)
+
+                    elif uploaded_doc.name.endswith(".xlsx"):
+                        excel_data = pd.read_excel(uploaded_doc)
+                        excel_data = excel_data.fillna("")
+                        
+                        doc_pdf = SimpleDocTemplate(pdf_buffer, pagesize=letter)
+                        table_data = [excel_data.columns.values.tolist()] + excel_data.values.tolist()
+
+                        pdf_table = Table(table_data)
+                        pdf_table.setStyle(TableStyle([
+                            ('BACKGROUND', (0,0), (-1,0), colors.grey),
+                            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+                            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                            ('GRID', (0,0), (-1,-1), 1, colors.black)
+                        ]))
+
+                        doc_pdf.build([pdf_table])
+
+                    pdf_buffer.seek(0)
+                    st.download_button(
+                        label="Download PDF File",
+                        data=pdf_buffer,
+                        file_name=f"{uploaded_doc.name.rsplit('.', 1)[0]}.pdf",
+                        mime="application/pdf"
+                    )
+            finally:
+                pdf_semaphore.release()
+
+    # ----------------------------------------------------
+    # MODE 2: PDF -> Word / Excel
+    # ----------------------------------------------------
+    elif pdf_option == "🔄 PDF ➔ Word / Excel":
+        uploaded_pdf = st.file_uploader("Upload PDF Document", type=["pdf"])
+        target_format = st.radio("Select Target Output Format:", ["Word (.docx)", "Excel (.xlsx)"], horizontal=True)
+
+        if uploaded_pdf and st.button("🔄 Convert PDF"):
+            acquired = pdf_semaphore.acquire(blocking=False)
+            if not acquired:
+                st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
+                pdf_semaphore.acquire()
+
+            try:
+                with st.spinner("Extracting content and parsing structures..."):
+                    pdf_bytes = uploaded_pdf.read()
+
+                    if target_format == "Word (.docx)":
+                        import tempfile
+                        import os
+
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
+                            tmp_pdf.write(pdf_bytes)
+                            tmp_pdf_path = tmp_pdf.name
+
+                        tmp_docx_path = tmp_pdf_path.replace(".pdf", ".docx")
+
+                        try:
+                            cv = Converter(tmp_pdf_path)
+                            cv.convert(tmp_docx_path)
+                            cv.close()
+
+                            with open(tmp_docx_path, "rb") as f:
+                                docx_bytes = f.read()
+
+                            st.download_button(
+                                label="Download Word (.docx)",
+                                data=docx_bytes,
+                                file_name=f"{uploaded_pdf.name.rsplit('.', 1)[0]}.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            )
+                        finally:
+                            if os.path.exists(tmp_pdf_path): os.remove(tmp_pdf_path)
+                            if os.path.exists(tmp_docx_path): os.remove(tmp_docx_path)
+
+                    elif target_format == "Excel (.xlsx)":
+                        excel_buffer = io.BytesIO()
+                        all_tables = []
+
+                        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                            for page in pdf.pages:
+                                tables = page.extract_tables()
+                                for table in tables:
+                                    if table:
+                                        df = pd.DataFrame(table[1:], columns=table[0])
+                                        all_tables.append(df)
+
+                        if all_tables:
+                            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                                for idx, df in enumerate(all_tables):
+                                    df.to_excel(writer, sheet_name=f"Table_{idx+1}", index=False)
+                            excel_buffer.seek(0)
+
+                            st.download_button(
+                                label="Download Excel (.xlsx)",
+                                data=excel_buffer,
+                                file_name=f"{uploaded_pdf.name.rsplit('.', 1)[0]}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                        else:
+                            st.warning("No structured tables could be detected in this PDF file.")
+            finally:
+                pdf_semaphore.release()
+
+    # ----------------------------------------------------
+    # MODE 3: PDF -> Image
+    # ----------------------------------------------------
+    elif pdf_option == "🖼️ PDF ➔ Image":
+        uploaded_pdf = st.file_uploader("Upload PDF File", type=["pdf"])
+
+        if uploaded_pdf and st.button("🖼️ Extract Pages as PNG"):
+            acquired = pdf_semaphore.acquire(blocking=False)
+            if not acquired:
+                st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
+                pdf_semaphore.acquire()
+
+            try:
+                with st.spinner("Rendering PDF pages to PNG images..."):
+                    import zipfile
+                    images = convert_from_bytes(uploaded_pdf.read())
+
+                    zip_buffer = io.BytesIO()
+                    with zipfile.ZipFile(zip_buffer, "w") as zip_file:
+                        for i, img in enumerate(images):
+                            img_byte_arr = io.BytesIO()
+                            img.save(img_byte_arr, format='PNG')
+                            zip_file.writestr(f"page_{i+1}.png", img_byte_arr.getvalue())
+
+                    zip_buffer.seek(0)
+                    st.download_button(
+                        label="Download Pages ZIP",
+                        data=zip_buffer,
+                        file_name=f"{uploaded_pdf.name.rsplit('.', 1)[0]}_images.zip",
+                        mime="application/zip"
+                    )
+            finally:
+                pdf_semaphore.release()
+
+    # ----------------------------------------------------
+    # MODE 4: Image -> PDF
+    # ----------------------------------------------------
+    elif pdf_option == "📸 Image ➔ PDF":
+        uploaded_imgs = st.file_uploader(
+            "Upload Images (PNG, JPG, JPEG, WEBP)", 
+            type=["png", "jpg", "jpeg", "webp"], 
+            accept_multiple_files=True
+        )
+
+        if uploaded_imgs and st.button("📸 Convert Images to PDF"):
+            acquired = pdf_semaphore.acquire(blocking=False)
+            if not acquired:
+                st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
+                pdf_semaphore.acquire()
+
+            try:
+                with st.spinner("Downscaling and building PDF in RAM..."):
+                  

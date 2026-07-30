@@ -1,4 +1,6 @@
 import io
+import os
+import tempfile
 import threading
 import librosa
 import numpy as np
@@ -12,7 +14,6 @@ from pdf2image import convert_from_bytes
 import pdfplumber
 from pdf2docx import Converter
 from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
@@ -143,7 +144,8 @@ if app_mode == "🎧 Audio Studio":
     )
 
     def apply_reverb(y, sr, wet_level=0.3, delay_ms=40, decay=0.5):
-        if wet_level <= 0: return y
+        if wet_level <= 0:
+            return y
         delay_samples = int(sr * (delay_ms / 1000.0))
         output = np.copy(y)
         if output.ndim == 1:
@@ -157,7 +159,8 @@ if app_mode == "🎧 Audio Studio":
             return (1 - wet_level) * y + wet_level * output
 
     def apply_bass_boost(y, sr, gain_db=6.0, cutoff=200):
-        if gain_db == 0: return y
+        if gain_db == 0:
+            return y
         b, a = scipy.signal.butter(2, cutoff / (sr / 2), btype='low')
         gain_linear = 10 ** (gain_db / 20)
         filtered = scipy.signal.lfilter(b, a, y)
@@ -406,9 +409,6 @@ elif app_mode == "📄 PDF Converter":
                     pdf_bytes = uploaded_pdf.read()
 
                     if target_format == "Word (.docx)":
-                        import tempfile
-                        import os
-
                         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
                             tmp_pdf.write(pdf_bytes)
                             tmp_pdf_path = tmp_pdf.name
@@ -430,9 +430,9 @@ elif app_mode == "📄 PDF Converter":
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                             )
                         finally:
-                            if os.path.exists(tmp_pdf_path): 
+                            if os.path.exists(tmp_pdf_path):
                                 os.remove(tmp_pdf_path)
-                            if os.path.exists(tmp_docx_path): 
+                            if os.path.exists(tmp_docx_path):
                                 os.remove(tmp_docx_path)
 
                     elif target_format == "Excel (.xlsx)":
@@ -515,4 +515,5 @@ elif app_mode == "📄 PDF Converter":
                 pdf_semaphore.acquire()
 
             try:
-               
+                with st.spinner("Downscaling and building PDF in RAM..."):
+   

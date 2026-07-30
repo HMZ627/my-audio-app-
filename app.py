@@ -13,35 +13,62 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- Define Your Transparent Headset Asset ---
-HEADSET_URL = "https://freepngimg.com/download/headphones/2-headphones-png-image-with-transparency-background.png"
+# --- Reliable Transparent Asset Links ---
+HEADSET_URL = "https://images.rawpixel.com/image_png_800/pngsite-mkt/43e778ea-4ec7-4148-9fdb-069bc4efadac.png"
+CAMERA_URL = "https://images.rawpixel.com/image_png_800/pngsite-mkt/96f5b9d2-36e2-4bd5-a131-7b0a3f9bb467.png"
 
-# --- Inject Custom CSS for Glassmorphism & Continuous Rotation ---
+# --- Inject Custom CSS ---
 custom_css = f"""
 <style>
-/* Main App Background - Dark Studio Theme */
+/* Main App Background */
 .stApp {{
     background-color: #01060a;
     color: #f0f6fc;
 }}
 
-/* --- GLASSMORPHISM WITH LIGHT CYAN-BLACK GRADIENT EDGES --- */
+/* Stationary Background Image Container */
+.bg-image-container {{
+    position: fixed;
+    top: 50%;
+    right: 5%;
+    transform: translateY(-50%);
+    width: 450px;
+    height: 450px;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.6;
+}}
+
+.bg-image {{
+    width: 100%;
+    height: 100%;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    filter: drop-shadow(0 0 35px rgba(0, 229, 255, 0.6));
+}}
+
+/* Specific background images (Stationary) */
+.headset-bg {{
+    background-image: url('{HEADSET_URL}');
+}}
+
+.camera-bg {{
+    background-image: url('{CAMERA_URL}');
+}}
+
+/* Glassmorphism Main Container */
 div.block-container {{
-    background: rgba(13, 22, 33, 0.65);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: rgba(13, 22, 33, 0.70);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-radius: 20px;
     padding: 2.5rem !important;
     margin-top: 1rem;
-    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.7);
-    z-index: 2;
+    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.8);
+    z-index: 10;
     position: relative;
-    border: 1.5px solid transparent;
-    background-clip: padding-box, border-box;
-    background-origin: padding-box, border-box;
-    background-image: 
-        linear-gradient(rgba(13, 22, 33, 0.75), rgba(13, 22, 33, 0.75)), 
-        linear-gradient(135deg, #00e5ff 0%, rgba(0, 229, 255, 0.3) 35%, rgba(0, 0, 0, 0.8) 80%, #01060a 100%);
+    border: 1.5px solid rgba(0, 229, 255, 0.3);
 }}
 
 /* Tool Switching Banner at Top */
@@ -54,38 +81,6 @@ div.block-container {{
     color: #00e5ff;
     font-weight: 500;
     font-size: 0.95rem;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}}
-
-/* Background Asset Styling */
-.headset-container {{
-    position: fixed;
-    top: 50%;
-    right: 5%;
-    transform: translateY(-50%);
-    width: 500px;
-    height: 500px;
-    z-index: 1;
-    pointer-events: none;
-    opacity: 0.8;
-}}
-
-.rotating-headset {{
-    width: 100%;
-    height: 100%;
-    background-image: url('{HEADSET_URL}');
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    animation: rotateSeamless 30s linear infinite;
-    filter: drop-shadow(0 0 25px rgba(0, 229, 255, 0.5));
-}}
-
-@keyframes rotateSeamless {{
-    from {{ transform: rotate(0deg); }}
-    to {{ transform: rotate(360deg); }}
 }}
 
 .stSlider > div {{ color: #ffffff; }}
@@ -104,16 +99,11 @@ div.block-container {{
     transform: translateY(-2px);
 }}
 </style>
-
-<!-- Background Headset HTML Container -->
-<div class="headset-container">
-    <div class="rotating-headset"></div>
-</div>
 """
 
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# --- Enhanced Sidebar Navigation with Clear Prompts ---
+# --- Enhanced Sidebar Navigation ---
 st.sidebar.markdown("### 🛠️ More Tools Available")
 st.sidebar.info("Use the menu below to switch between utility tools.")
 
@@ -127,11 +117,14 @@ app_mode = st.sidebar.radio(
 # TOOL 1: AUDIO STUDIO
 # ==========================================
 if app_mode == "🎧 Audio Studio":
-    # Top notification banner pointing out additional tools
+    # Stationary Headset Background Container
     st.markdown(
         """
+        <div class="bg-image-container">
+            <div class="bg-image headset-bg"></div>
+        </div>
         <div class="tool-banner">
-            💡 <b>For more tools</b> Open the left menu navigation bar <b>More Tools  ➔</b> Use the AI Image Background Remover!
+            💡 <b>For more tools</b> Open the left menu <b>More Tools   ➔</b> Use the AI Image Background Remover!
         </div>
         """, 
         unsafe_allow_html=True
@@ -158,7 +151,7 @@ if app_mode == "🎧 Audio Studio":
         filtered = scipy.signal.lfilter(b, a, y)
         return y + (filtered * (gain_linear - 1))
 
-    st.title("CA.Editor — Web-Based Audio Studio")
+    st.title("CA.Editor — Web-Based Editor Studio — Audio editor")
     st.write("Lightweight, in-memory real-time audio manipulation engine.")
 
     uploaded_file = st.file_uploader("Upload an Audio File (WAV, MP3, OGG, FLAC)", type=["wav", "mp3", "ogg", "flac"])
@@ -221,8 +214,12 @@ if app_mode == "🎧 Audio Studio":
 # TOOL 2: IMAGE BACKGROUND REMOVER
 # ==========================================
 elif app_mode == "🖼️ Image BG Remover":
+    # Stationary Camera Background Container
     st.markdown(
         """
+        <div class="bg-image-container">
+            <div class="bg-image camera-bg"></div>
+        </div>
         <div class="tool-banner">
             💡 <b>Need audio editing?</b> Switch back to <b>🎧 Audio Studio</b> using the left menu!
         </div>
@@ -265,5 +262,5 @@ elif app_mode == "🖼️ Image BG Remover":
                     data=img_buffer,
                     file_name="CA_BG_Removed.png",
                     mime="image/png"
-            )
-                             
+    )
+                

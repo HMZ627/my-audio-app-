@@ -170,7 +170,24 @@ if app_mode == "🎧 Audio Studio":
         y = st.session_state["audio_data"]
         sr = st.session_state["sr"]
 
-        st.subheader("Studio Controls")
+        # Calculate Total Duration in Seconds
+        total_samples = y.shape[1] if y.ndim > 1 else len(y)
+        total_duration = float(total_samples / sr)
+
+        st.subheader("✂️ Audio Range Trimmer")
+        # Dual-Ended Slider for Start & End Selection
+        trim_range = st.slider(
+            "Drag left handle to cut start, right handle to cut end:",
+            min_value=0.0,
+            max_value=total_duration,
+            value=(0.0, total_duration),
+            step=0.1,
+            format="%.1fs"
+        )
+
+        st.info(f"⏱️ **Selected Audio Duration:** {trim_range[1] - trim_range[0]:.1f}s (from {trim_range[0]:.1f}s to {trim_range[1]:.1f}s)")
+
+        st.subheader("🎛️ Studio Controls")
         col1, col2 = st.columns(2)
         with col1:
             speed = st.slider("Speed Modifier", 0.5, 2.0, 1.0, 0.05)
@@ -179,19 +196,28 @@ if app_mode == "🎧 Audio Studio":
             bass = st.slider("Bass Boost (dB)", 0, 12, 0, 1)
             reverb = st.slider("Reverb (Wet/Dry Mix)", 0.0, 0.8, 0.0, 0.05)
 
-        # Audio Processing with Semaphore (Limit 5 parallel users)
+        # Audio Processing with Semaphore Limit
         acquired = audio_semaphore.acquire(blocking=False)
         if not acquired:
-            st.info("⏳ Please wait in the queue, processing your request...")
-            audio_semaphore.acquire() # Block until slot is available
+            st.info("⏳ Audio engine is at capacity (5 active users). Queuing your request...")
+            audio_semaphore.acquire()
 
         try:
-            with st.spinner("Applying digital signal processing..."):
-                processed_y = y.copy()
+            with st.spinner("Applying trimming & digital signal processing..."):
+                # Step 1: Trim Array using Slider Values FIRST to reduce DSP workload
+                start_sample = int(trim_range[0] * sr)
+                end_sample = int(trim_range[1] * sr)
 
+                if y.ndim > 1:
+                    processed_y = y[:, start_sample:end_sample].copy()
+                else:
+                    processed_y = y[start_sample:end_sample].copy()
+
+                # Step 2: Apply Pitch Shift
                 if pitch != 0:
                     processed_y = librosa.effects.pitch_shift(y=processed_y, sr=sr, n_steps=pitch)
 
+                # Step 3: Apply Speed Stretch
                 if speed != 1.0:
                     if processed_y.ndim > 1:
                         channels = [librosa.effects.time_stretch(y=processed_y[c], rate=speed) for c in range(processed_y.shape[0])]
@@ -199,12 +225,15 @@ if app_mode == "🎧 Audio Studio":
                     else:
                         processed_y = librosa.effects.time_stretch(y=processed_y, rate=speed)
 
+                # Step 4: Apply Bass Boost
                 if bass > 0:
                     processed_y = apply_bass_boost(processed_y, sr, gain_db=bass)
 
+                # Step 5: Apply Reverb
                 if reverb > 0:
                     processed_y = apply_reverb(processed_y, sr, wet_level=reverb)
 
+                # Export to Buffer
                 buffer = io.BytesIO()
                 out_data = processed_y.T if processed_y.ndim > 1 else processed_y
                 sf.write(buffer, out_data, sr, format='WAV')
@@ -261,8 +290,8 @@ elif app_mode == "🖼️ Image BG Remover":
             # Image BG Remover processing with Semaphore (Limit 2 parallel users)
             acquired = bg_semaphore.acquire(blocking=False)
             if not acquired:
-                st.info("⏳ Processing your request. You are next in queue — please wait!")
-                bg_semaphore.acquire()  # Block until 1 of the 2 slots opens up
+                st.info("⏳ AI engine is processing 2 images right now. You are next in queue — please wait!")
+                bg_semaphore.acquire()
 
             try:
                 with st.spinner("Processing background removal via AI..."):
@@ -289,3 +318,4 @@ elif app_mode == "🖼️ Image BG Remover":
                     )
             finally:
                 bg_semaphore.release()
+                    

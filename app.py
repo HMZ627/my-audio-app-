@@ -19,9 +19,8 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
-# QR Libraries
+# QR Libraries (Pure Python / Self-Contained)
 import qrcode
-from pyzbar.pyzbar import decode as decode_qr
 import cv2
 
 # --- Threading Semaphores for Concurrent Limits ---
@@ -142,7 +141,7 @@ if app_mode == "🎧 Audio Studio":
             <div class="bg-image headset-bg"></div>
         </div>
         <div class="tool-banner">
-            💡 <b>For more tools</b> Open the left menu <b>More Tools  ➔</b> to access AI tools, PDF Converter, or QR Studio!
+            💡 <b>Looking for more tools?</b> Open the left menu (<b>More Tools ➔</b>) to access AI tools, PDF Converter, or QR Studio!
         </div>
         """, 
         unsafe_allow_html=True
@@ -213,7 +212,7 @@ if app_mode == "🎧 Audio Studio":
 
         acquired = audio_semaphore.acquire(blocking=False)
         if not acquired:
-            st.info("⏳ Processing your request, You're next in queue, please wait...")
+            st.info("⏳ Audio engine is at capacity (5 active users). Queuing your request...")
             audio_semaphore.acquire()
 
         try:
@@ -294,7 +293,7 @@ elif app_mode == "🖼️ Image BG Remover":
 
             acquired = bg_semaphore.acquire(blocking=False)
             if not acquired:
-                st.info("⏳ Processing your request. You are next in queue — please wait!")
+                st.info("⏳ AI engine is processing 2 images right now. You are next in queue — please wait!")
                 bg_semaphore.acquire()
 
             try:
@@ -345,7 +344,7 @@ elif app_mode == "📄 PDF Converter":
         if uploaded_doc and st.button("🔄 Convert to PDF"):
             acquired = pdf_semaphore.acquire(blocking=False)
             if not acquired:
-                st.info("⏳ Please wait in queue. Processing your request...")
+                st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
                 pdf_semaphore.acquire()
 
             try:
@@ -400,7 +399,7 @@ elif app_mode == "📄 PDF Converter":
         if uploaded_pdf and st.button("🔄 Convert PDF"):
             acquired = pdf_semaphore.acquire(blocking=False)
             if not acquired:
-                st.info("⏳ Please wait in queue. Processing your request...")
+                st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
                 pdf_semaphore.acquire()
 
             try:
@@ -469,7 +468,7 @@ elif app_mode == "📄 PDF Converter":
         if uploaded_pdf and st.button("🖼️ Extract Pages as PNG"):
             acquired = pdf_semaphore.acquire(blocking=False)
             if not acquired:
-                st.info("⏳ Please wait in queue. Processing your request...")
+                st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
                 pdf_semaphore.acquire()
 
             try:
@@ -504,7 +503,7 @@ elif app_mode == "📄 PDF Converter":
         if uploaded_imgs and st.button("📸 Convert Images to PDF"):
             acquired = pdf_semaphore.acquire(blocking=False)
             if not acquired:
-                st.info("⏳ Please wait in queue, processing your request...")
+                st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
                 pdf_semaphore.acquire()
 
             try:
@@ -539,7 +538,7 @@ elif app_mode == "📄 PDF Converter":
 
 
 # ==========================================
-# TOOL 4: QR CODE GENERATOR & DECODER
+# TOOL 4: QR CODE GENERATOR & DECODER (OpenCV Powered)
 # ==========================================
 elif app_mode == "📱 QR Studio":
     st.title("CA.Editor — QR Code Studio")
@@ -547,9 +546,7 @@ elif app_mode == "📱 QR Studio":
 
     qr_sub_mode = st.radio("Select Action:", ["✨ Generate QR Code", "🔍 Decode QR Code"], horizontal=True)
 
-    # ----------------------------------------------------
     # GENERATOR MODE
-    # ----------------------------------------------------
     if qr_sub_mode == "✨ Generate QR Code":
         qr_type = st.selectbox("Content Type:", ["Plain Text / URL", "📶 Wi-Fi Access Point"])
 
@@ -591,7 +588,6 @@ elif app_mode == "📱 QR Studio":
                 hidden = st.checkbox("Hidden Network?")
 
             if ssid and st.button("📶 Generate Wi-Fi QR Code"):
-                # Wi-Fi MeCard format: WIFI:S:SSID;T:WPA;P:password;H:true;;
                 wifi_str = f"WIFI:S:{ssid};T:{security};P:{password if security != 'nopass' else ''};H:{'true' if hidden else 'false'};;"
                 
                 qr = qrcode.QRCode(
@@ -618,9 +614,7 @@ elif app_mode == "📱 QR Studio":
                     mime="image/png"
                 )
 
-    # ----------------------------------------------------
-    # DECODER MODE
-    # ----------------------------------------------------
+    # DECODER MODE (Pure OpenCV)
     elif qr_sub_mode == "🔍 Decode QR Code":
         uploaded_qr = st.file_uploader("Upload Image Containing QR Code", type=["png", "jpg", "jpeg", "webp"])
 
@@ -629,25 +623,16 @@ elif app_mode == "📱 QR Studio":
             st.image(pil_img, caption="Uploaded Image", width=300)
 
             if st.button("🔍 Scan & Decode"):
-                decoded_objects = decode_qr(pil_img)
-
-                # Fallback to OpenCV detector if pyzbar returns empty
-                if not decoded_objects:
+                with st.spinner("Decoding QR code using OpenCV..."):
                     img_bytes = np.asarray(bytearray(uploaded_qr.getvalue()), dtype=np.uint8)
                     cv_img = cv2.imdecode(img_bytes, cv2.IMREAD_COLOR)
+                    
                     detector = cv2.QRCodeDetector()
-                    val, _, _ = detector.detectAndDecode(cv_img)
-                    if val:
-                        raw_data = val
-                    else:
-                        raw_data = None
-                else:
-                    raw_data = decoded_objects[0].data.decode("utf-8")
+                    raw_data, _, _ = detector.detectAndDecode(cv_img)
 
                 if raw_data:
                     st.success("✅ QR Code Successfully Decoded!")
                     
-                    # Check for Wi-Fi format: WIFI:S:...;T:...;P:...;
                     if raw_data.startswith("WIFI:"):
                         st.subheader("📶 Wi-Fi Network Credentials Detected")
                         

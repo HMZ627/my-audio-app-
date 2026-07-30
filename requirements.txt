@@ -14,3 +14,7 @@ reportlab
 python-docx
 pdf2image
 Pillow
+qrcode
+pillow
+pyzbar
+opencv-python-headless

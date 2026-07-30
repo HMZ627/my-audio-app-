@@ -516,4 +516,31 @@ elif app_mode == "📄 PDF Converter":
 
             try:
                 with st.spinner("Downscaling and building PDF in RAM..."):
-   
+                    pil_images = []
+                    max_dim = 2048  # Capped max resolution to keep RAM usage low
+
+                    for img in uploaded_imgs:
+                        im = Image.open(img)
+                        # Downscale image if it exceeds 2048px on any axis
+                        if max(im.size) > max_dim:
+                            im.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+                        pil_images.append(im.convert("RGB"))
+
+                    pdf_buffer = io.BytesIO()
+                    if pil_images:
+                        pil_images[0].save(
+                            pdf_buffer, 
+                            format="PDF", 
+                            save_all=True, 
+                            append_images=pil_images[1:]
+                        )
+                    pdf_buffer.seek(0)
+
+                    st.download_button(
+                        label="Download PDF Document",
+                        data=pdf_buffer,
+                        file_name="Converted_Images.pdf",
+                        mime="application/pdf"
+                    )
+            finally:
+                pdf_semaphore.release()

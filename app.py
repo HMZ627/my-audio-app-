@@ -1,10 +1,24 @@
 import io
+import threading
 import librosa
 import numpy as np
 import scipy.signal
 import soundfile as sf
 import streamlit as st
 from PIL import Image
+
+# --- Threading Semaphores for Concurrent Limits ---
+# Image BG Remover: Allow up to 2 parallel tasks
+if "bg_semaphore" not in st.session_state:
+    bg_semaphore = threading.Semaphore(2)
+else:
+    bg_semaphore = st.session_state["bg_semaphore"]
+
+# Audio Studio: Allow up to 5 parallel tasks
+if "audio_semaphore" not in st.session_state:
+    audio_semaphore = threading.Semaphore(5)
+else:
+    audio_semaphore = st.session_state["audio_semaphore"]
 
 # --- Streamlit Page Configuration ---
 st.set_page_config(
@@ -17,16 +31,14 @@ st.set_page_config(
 HEADSET_URL = "https://images.rawpixel.com/image_png_800/pngsite-mkt/43e778ea-4ec7-4148-9fdb-069bc4efadac.png"
 CAMERA_URL = "https://images.rawpixel.com/image_png_800/pngsite-mkt/96f5b9d2-36e2-4bd5-a131-7b0a3f9bb467.png"
 
-# --- Inject Custom CSS ---
+# --- Custom CSS ---
 custom_css = f"""
 <style>
-/* Main App Background */
 .stApp {{
     background-color: #01060a;
     color: #f0f6fc;
 }}
 
-/* Stationary Background Image Container */
 .bg-image-container {{
     position: fixed;
     top: 50%;
@@ -48,16 +60,9 @@ custom_css = f"""
     filter: drop-shadow(0 0 35px rgba(0, 229, 255, 0.6));
 }}
 
-/* Specific background images (Stationary) */
-.headset-bg {{
-    background-image: url('{HEADSET_URL}');
-}}
+.headset-bg {{ background-image: url('{HEADSET_URL}'); }}
+.camera-bg {{ background-image: url('{CAMERA_URL}'); }}
 
-.camera-bg {{
-    background-image: url('{CAMERA_URL}');
-}}
-
-/* Glassmorphism Main Container */
 div.block-container {{
     background: rgba(13, 22, 33, 0.70);
     backdrop-filter: blur(12px);
@@ -71,7 +76,6 @@ div.block-container {{
     border: 1.5px solid rgba(0, 229, 255, 0.3);
 }}
 
-/* Tool Switching Banner at Top */
 .tool-banner {{
     background: linear-gradient(90deg, rgba(0, 229, 255, 0.15) 0%, rgba(0, 119, 255, 0.15) 100%);
     border: 1px solid rgba(0, 229, 255, 0.4);
@@ -103,7 +107,7 @@ div.block-container {{
 
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# --- Enhanced Sidebar Navigation ---
+# --- Sidebar Navigation ---
 st.sidebar.markdown("### 🛠️ More Tools Available")
 st.sidebar.info("Use the menu below to switch between utility tools.")
 
@@ -117,14 +121,13 @@ app_mode = st.sidebar.radio(
 # TOOL 1: AUDIO STUDIO
 # ==========================================
 if app_mode == "🎧 Audio Studio":
-    # Stationary Headset Background Container
     st.markdown(
         """
         <div class="bg-image-container">
             <div class="bg-image headset-bg"></div>
         </div>
         <div class="tool-banner">
-            💡 <b>For more tools</b> Open the left menu <b>More Tools   ➔</b> Use the AI Image Background Remover!
+            💡 <b>Looking for more tools?</b> Open the left menu (<b>More Tools ➔</b>) to use our AI Image Background Remover!
         </div>
         """, 
         unsafe_allow_html=True
@@ -151,7 +154,7 @@ if app_mode == "🎧 Audio Studio":
         filtered = scipy.signal.lfilter(b, a, y)
         return y + (filtered * (gain_linear - 1))
 
-    st.title("CA.Editor — Web-Based Editor Studio — Audio editor")
+    st.title("CA.Editor — Web-Based Audio Studio")
     st.write("Lightweight, in-memory real-time audio manipulation engine.")
 
     uploaded_file = st.file_uploader("Upload an Audio File (WAV, MP3, OGG, FLAC)", type=["wav", "mp3", "ogg", "flac"])
@@ -176,29 +179,38 @@ if app_mode == "🎧 Audio Studio":
             bass = st.slider("Bass Boost (dB)", 0, 12, 0, 1)
             reverb = st.slider("Reverb (Wet/Dry Mix)", 0.0, 0.8, 0.0, 0.05)
 
-        with st.spinner("Applying digital signal processing..."):
-            processed_y = y.copy()
+        # Audio Processing with Semaphore (Limit 5 parallel users)
+        acquired = audio_semaphore.acquire(blocking=False)
+        if not acquired:
+            st.info("⏳ Audio engine is at capacity (5 active users). Queuing your request...")
+            audio_semaphore.acquire() # Block until slot is available
 
-            if pitch != 0:
-                processed_y = librosa.effects.pitch_shift(y=processed_y, sr=sr, n_steps=pitch)
+        try:
+            with st.spinner("Applying digital signal processing..."):
+                processed_y = y.copy()
 
-            if speed != 1.0:
-                if processed_y.ndim > 1:
-                    channels = [librosa.effects.time_stretch(y=processed_y[c], rate=speed) for c in range(processed_y.shape[0])]
-                    processed_y = np.array(channels)
-                else:
-                    processed_y = librosa.effects.time_stretch(y=processed_y, rate=speed)
+                if pitch != 0:
+                    processed_y = librosa.effects.pitch_shift(y=processed_y, sr=sr, n_steps=pitch)
 
-            if bass > 0:
-                processed_y = apply_bass_boost(processed_y, sr, gain_db=bass)
+                if speed != 1.0:
+                    if processed_y.ndim > 1:
+                        channels = [librosa.effects.time_stretch(y=processed_y[c], rate=speed) for c in range(processed_y.shape[0])]
+                        processed_y = np.array(channels)
+                    else:
+                        processed_y = librosa.effects.time_stretch(y=processed_y, rate=speed)
 
-            if reverb > 0:
-                processed_y = apply_reverb(processed_y, sr, wet_level=reverb)
+                if bass > 0:
+                    processed_y = apply_bass_boost(processed_y, sr, gain_db=bass)
 
-            buffer = io.BytesIO()
-            out_data = processed_y.T if processed_y.ndim > 1 else processed_y
-            sf.write(buffer, out_data, sr, format='WAV')
-            buffer.seek(0)
+                if reverb > 0:
+                    processed_y = apply_reverb(processed_y, sr, wet_level=reverb)
+
+                buffer = io.BytesIO()
+                out_data = processed_y.T if processed_y.ndim > 1 else processed_y
+                sf.write(buffer, out_data, sr, format='WAV')
+                buffer.seek(0)
+        finally:
+            audio_semaphore.release()
 
         st.subheader("Preview & Export")
         st.audio(buffer, format="audio/wav")
@@ -214,7 +226,6 @@ if app_mode == "🎧 Audio Studio":
 # TOOL 2: IMAGE BACKGROUND REMOVER
 # ==========================================
 elif app_mode == "🖼️ Image BG Remover":
-    # Stationary Camera Background Container
     st.markdown(
         """
         <div class="bg-image-container">
@@ -247,20 +258,34 @@ elif app_mode == "🖼️ Image BG Remover":
             from rembg import remove
             session = load_rembg_session()
 
-            with st.spinner("Removing background via AI..."):
-                output_image = remove(input_image, session=session)
+            # Image BG Remover processing with Semaphore (Limit 2 parallel users)
+            acquired = bg_semaphore.acquire(blocking=False)
+            if not acquired:
+                st.info("⏳ AI engine is processing 2 images right now. You are next in queue — please wait!")
+                bg_semaphore.acquire()  # Block until 1 of the 2 slots opens up
 
-                st.subheader("Background Removed")
-                st.image(output_image, use_column_width=True)
+            try:
+                with st.spinner("Processing background removal via AI..."):
+                    # Step 1: Smart Downscaling (Caps dimensions at 2048px to preserve RAM)
+                    max_dim = 2048
+                    if max(input_image.size) > max_dim:
+                        input_image.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
 
-                img_buffer = io.BytesIO()
-                output_image.save(img_buffer, format="PNG")
-                img_buffer.seek(0)
+                    # Step 2: Remove Background safely
+                    output_image = remove(input_image, session=session)
 
-                st.download_button(
-                    label="Download Transparent PNG",
-                    data=img_buffer,
-                    file_name="CA_BG_Removed.png",
-                    mime="image/png"
-    )
-                
+                    st.subheader("Background Removed")
+                    st.image(output_image, use_column_width=True)
+
+                    img_buffer = io.BytesIO()
+                    output_image.save(img_buffer, format="PNG")
+                    img_buffer.seek(0)
+
+                    st.download_button(
+                        label="Download Transparent PNG",
+                        data=img_buffer,
+                        file_name="CA_BG_Removed.png",
+                        mime="image/png"
+                    )
+            finally:
+                bg_semaphore.release()

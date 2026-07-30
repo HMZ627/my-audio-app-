@@ -6,3 +6,11 @@ scipy
 pillow
 rembg
 onnxruntime
+pdf2docx
+pdfplumber
+openpyxl
+pandas
+reportlab
+python-docx
+pdf2image
+Pillow

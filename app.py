@@ -131,7 +131,7 @@ if app_mode == "🎧 Audio Studio":
     st.markdown(
         """
         <div class="tool-banner">
-            💡 <b>For more tools?</b> Open the left menu navigation bar(<b>More Tools ➔</b>) to use the AI Image Background Remover!
+            💡 <b>For more tools</b> Open the left menu navigation bar <b>More Tools  ➔</b> Use the AI Image Background Remover!
         </div>
         """, 
         unsafe_allow_html=True

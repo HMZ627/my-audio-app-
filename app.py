@@ -47,9 +47,22 @@ st.set_page_config(
 HEADSET_URL = "https://images.rawpixel.com/image_png_800/pngsite-mkt/43e778ea-4ec7-4148-9fdb-069bc4efadac.png"
 CAMERA_URL = "https://images.rawpixel.com/image_png_800/pngsite-mkt/96f5b9d2-36e2-4bd5-a131-7b0a3f9bb467.png"
 
-# --- Custom CSS ---
+# --- Custom CSS with Animated Circulating Cyan Border ---
 custom_css = f"""
 <style>
+/* Register custom property for smooth angle interpolation */
+@property --border-angle {{
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}}
+
+@keyframes rotateBorder {{
+  to {{
+    --border-angle: 360deg;
+  }}
+}}
+
 .stApp {{
     background-color: #01060a;
     color: #f0f6fc;
@@ -79,17 +92,32 @@ custom_css = f"""
 .headset-bg {{ background-image: url('{HEADSET_URL}'); }}
 .camera-bg {{ background-image: url('{CAMERA_URL}'); }}
 
+/* Glassmorphism Main Container with Circulating Cyan-Black Light */
 div.block-container {{
-    background: rgba(13, 22, 33, 0.70);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: 20px;
+    position: relative;
+    z-index: 10;
     padding: 2.5rem !important;
     margin-top: 1rem;
-    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.8);
-    z-index: 10;
-    position: relative;
-    border: 1.5px solid rgba(0, 229, 255, 0.3);
+    border-radius: 20px;
+    
+    /* Dark glassmorphism back layer */
+    background: rgba(13, 22, 33, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    
+    /* Clockwise conic gradient light trail */
+    border: 2px solid transparent;
+    background-image: 
+        linear-gradient(rgba(13, 22, 33, 0.85), rgba(13, 22, 33, 0.85)), 
+        conic-gradient(from var(--border-angle), #00e5ff 0%, #002b36 20%, #01060a 50%, #002b36 80%, #00e5ff 100%);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    
+    /* Infinite clockwise rotation loop */
+    animation: rotateBorder 4s linear infinite;
+    
+    /* Outer atmospheric glow */
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 229, 255, 0.25);
 }}
 
 .tool-banner {{
@@ -502,7 +530,7 @@ elif app_mode == "📄 PDF Converter":
 
         if uploaded_imgs and st.button("📸 Convert Images to PDF"):
             acquired = pdf_semaphore.acquire(blocking=False)
-            if not acquired:
+      if not acquired:
                 st.info("⏳ Engine busy with other conversions (Limit: 3 parallel). Queuing your request...")
                 pdf_semaphore.acquire()
 
@@ -522,7 +550,7 @@ elif app_mode == "📄 PDF Converter":
                         pil_images[0].save(
                             pdf_buffer, 
                             format="PDF", 
-                            save_all=True,
+                            save_all=True, 
                             append_images=pil_images[1:]
                         )
                     pdf_buffer.seek(0)

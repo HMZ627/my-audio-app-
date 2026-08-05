@@ -17,5 +17,5 @@ Pillow
 qrcode
 pillow
 opencv-python-headless
-
+openpyxl
 
